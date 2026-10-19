@@ -1,4 +1,4 @@
-# Steadyhand: Technical Design
+# Alexa: Technical Design
 
 ## 1. Architecture
 
@@ -9,7 +9,7 @@ Customer voice
 Alexa+ (LLM: intent interpretation, response generation, UI rendering)
      │  MCP over Streamable HTTP, spec 2025-11-25
      ▼
-Steadyhand MCP server (FastAPI, Python)            ← AWS only for the Alexa+ endpoint
+Alexa MCP server (FastAPI, Python)                 ← AWS only for the Alexa+ endpoint
      ├── Auth & scope check
      ├── Tool router
      ├── Rules engine (deterministic validation and execution)
@@ -128,7 +128,7 @@ Append-only table with a hash chain:
 | prev_hash | text | hash of previous row |
 | row_hash | text | SHA-256 over this row plus prev_hash |
 
-**Verification.** A CLI command (`steadyhand audit verify`) recomputes the chain and reports the first broken link. The console shows a green or red chain status.
+**Verification.** A CLI command (`alexa audit verify`) recomputes the chain and reports the first broken link. The console shows a green or red chain status.
 
 **Retention.** A scheduled job deletes rows older than the user's retention setting. Deletion keeps a tombstone row (id, ts, tool, decision) so the chain stays verifiable.
 
@@ -203,7 +203,7 @@ The console talks to the server over REST (`/api/trace`, `/api/audit`, `/api/pri
 ## 10. Repository layout
 
 ```
-steadyhand/
+alexa/
 ├── README.md
 ├── TECHNICAL.md
 ├── STANDARD.md
@@ -249,4 +249,4 @@ Cut order if time runs short: certification runner first (keep the checklist as 
 - **Alexa+ registration details.** The public docs describe the add-on flow through the `alexa-ai` CLI. Confirm the exact registration steps for a self-hosted server in the track resources before building the deployment.
 - **Confirmation rendering is Alexa+'s.** Our preview object must be complete enough for Alexa+ to render. Validate the shape against the Alexa+ UX guidelines.
 - **Scope creep.** Mitigation: the cut order above.
-- **Device realism.** Adapters are simulated. Say so in the demo and show the adapter boundary as the integration point.
+- **Device realism.** Adapters are simulated. Say so in the demo and show the adapter boundary as the integration point.ss

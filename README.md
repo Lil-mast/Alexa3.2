@@ -2,13 +2,13 @@
 
 **A deterministic rules and audit layer for Alexa+ agents.**
 
-Steadyhand is a self-hosted MCP server that lets Alexa+ control real things (timers, alarms, lights, thermostats, media) and take consequential actions (bookings, payments, deletions) without letting the language model touch device state directly. The model interprets what the user meant. Rules decide what happens. Every action is previewed, confirmed when risky, logged, and reversible where possible.
+Alexa is a self-hosted MCP server that lets Alexa+ control real things (timers, alarms, lights, thermostats, media) and take consequential actions (bookings, payments, deletions) without letting the language model touch device state directly. The model interprets what the user meant. Rules decide what happens. Every action is previewed, confirmed when risky, logged, and reversible where possible.
 
 ## The problem
 
 Voice assistants fail in two opposite ways. Simple commands become unreliable when a model is asked to do work a rule should do: a timer set to "ten minutes" should be exactly ten minutes every time. Consequential actions become unsafe when a misheard word triggers a purchase or deletes something with no record of who or what caused it.
 
-Steadyhand separates those two concerns. The LLM handles ambiguity in language. Deterministic code handles state changes.
+Alexa separates those two concerns. The LLM handles ambiguity in language. Deterministic code handles state changes.
 
 ## What it does
 
@@ -20,11 +20,11 @@ Steadyhand separates those two concerns. The LLM handles ambiguity in language. 
 
 **Rollback and audit.** Every tool call is written to an append-only log with a hash chain, so tampering is detectable. Each entry records the tool name, the caller's scope, the parameters, the result, and the compensating action if one exists. Reversible actions (lights, thermostat, timers) expose an undo tool. Irreversible actions (deletions, payments) are marked as such before confirmation.
 
-**Visible tool use.** Each response includes a trace of the tools called, which service each one touched, and whether it succeeded. The Steadyhand console shows the same trace so developers and reviewers can see exactly what happened.
+**Visible tool use.** Each response includes a trace of the tools called, which service each one touched, and whether it succeeded. The Alexa console shows the same trace so developers and reviewers can see exactly what happened.
 
 **Privacy controls.** Four toggles, each stored per user and enforced by the server, not by convention: retention (how long audit entries and transcripts are kept), personalization (whether preferences are used), microphone behavior (wake-word only versus continuous, passed through as a declared requirement), and third-party sharing (whether tool results may leave the household's services).
 
-**Developer standard.** Steadyhand ships as a reference implementation of an MCP developer standard: permission scopes per tool, a shared error taxonomy, simulated user journeys for testing, and a certification checklist that high-risk tools must pass before submission.
+**Developer standard.** Alexa ships as a reference implementation of an MCP developer standard: permission scopes per tool, a shared error taxonomy, simulated user journeys for testing, and a certification checklist that high-risk tools must pass before submission. See [STANDARD.md](STANDARD.md).
 
 ## Quick start
 
