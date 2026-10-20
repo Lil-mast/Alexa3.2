@@ -48,7 +48,6 @@ async def principal_from_context(ctx: Context, verifier: StaticTokenVerifier) ->
 
 
 def build_mcp_server(settings: Settings, router: Router, verifier: StaticTokenVerifier) -> MCPServer:
-    # We are a resource server, not an authorization server. issuer_url is only
     # what we advertise in the protected-resource metadata; there is no token
     # endpoint yet. Static dev tokens have no RFC 8707 audience, so the audience
     # check stays off until tokens carry a resource value.
@@ -60,8 +59,8 @@ def build_mcp_server(settings: Settings, router: Router, verifier: StaticTokenVe
         validate_token_resource=False,
     )
     mcp = MCPServer(
-        name="alexa",
-        title="Alexa",
+        name="Alexa",
+        title="Alexa+ Smart Home",
         version=__version__,
         instructions=INSTRUCTIONS,
         auth=auth,
