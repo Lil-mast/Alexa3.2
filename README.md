@@ -41,7 +41,7 @@ npm install
 npm run dev
 ```
 
-The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the Alexa+ Local Inspector or the MCP Inspector before connecting it to Alexa+.
+The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the Alexa+ Local Inspector or the MCP Inspector before connecting it to Alexa+. The development bearer token is `dev-token`; see [backend/README.md](backend/README.md) for auth, endpoints, and configuration.
 
 ## Demo script (three minutes)
 
@@ -60,4 +60,6 @@ The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the A
 
 ## Status
 
-Hackathon build. See `TECHNICAL.md` for architecture, contracts, and the build plan.
+Hackathon build. Day 1 (MCP server skeleton, auth, timers, lights) is complete.
+See [BUILD_LOG.md](BUILD_LOG.md) for what is implemented and verified, and
+`TECHNICAL.md` for architecture and contracts.

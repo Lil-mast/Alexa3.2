@@ -71,7 +71,7 @@ Append-only table with a hash chain:
 row_hash(n) = SHA-256(canonical_json(row_fields) + row_hash(n-1))
 ```
 
-Each row stores tool name, tool version, scope used, params hash, decision (`executed`, `previewed`, `refused`, `no_change`), result, and `compensator_of` for undo links. `steadyhand audit verify` walks the chain and reports the first broken link.
+Each row stores tool name, tool version, scope used, params hash, decision (`executed`, `previewed`, `refused`, `no_change`), result, and `compensator_of` for undo links. `alexa audit verify` walks the chain and reports the first broken link.
 
 **Retention:** rows older than the user's setting are deleted, but a tombstone (id, timestamp, tool, decision) stays so the chain still verifies.
 
@@ -107,7 +107,7 @@ Published as `STANDARD.md` in the repo:
 
 - **Permission scopes:** `domain:resource:action`, granted per user, minimum needed per tool.
 - **Error taxonomy:** `INVALID_PARAM`, `OUT_OF_BOUNDS`, `NOT_FOUND`, `AUTH_REQUIRED`, `PRIVACY_BLOCKED`, `CONFIRMATION_REQUIRED`, `TOKEN_EXPIRED`, `TOKEN_CONSUMED`, `UPSTREAM_TIMEOUT`, `UPSTREAM_ERROR`. Each code maps to the follow-up Alexa+ should give.
-- **Journeys:** YAML files listing utterances, expected tool calls, expected status, and expected audit effect. Run from the terminal with `steadyhand journeys run`.
+- **Journeys:** YAML files listing utterances, expected tool calls, expected status, and expected audit effect. Run from the terminal with `alexa journeys run`.
 - **High-risk certification checklist:** preview names service and tool, token binds to params, refusal path tested, audit written for both execute and refuse, irreversibility stated, one full-flow journey passing in CI. Documented as a checklist. A runner is a stretch goal.
 
 ---
@@ -125,7 +125,7 @@ Published as `STANDARD.md` in the repo:
 ### Day 0 (prep, evening before)
 
 - Confirm Alexa+ developer access and the `alexa-ai` CLI.
-- Create the GitHub repo. Name: **Steadyhand**.
+- Create the GitHub repo. Name: **Alexa**.
 - Create an ElevenLabs voice ID and API key. Keep the key out of git.
 - Create the App Runner service pointing at `main`.
 
@@ -164,7 +164,7 @@ Published as `STANDARD.md` in the repo:
 **Build**
 
 - Hash-chained audit log with seeded startup fixture.
-- `steadyhand audit verify` CLI.
+- `alexa audit verify` CLI.
 - Undo for lights and timers via compensators; `tell_me_more` tool.
 - Concise mode default on.
 - Privacy toggles enforced. `third_party_sharing` blocks `external=true` tools.
