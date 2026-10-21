@@ -8,14 +8,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel
 
-ROOMS: dict[str, str] = {
-    # The manifest reuses these keys as the room enum and these values as the
-    # spoken names. Adding a room is a one-line change here.
-    "living_room": "Living room",
-    "bedroom": "Bedroom",
-    "kitchen": "Kitchen",
-    "office": "Office",
-}
+from app.adapters.rooms import ROOMS
+
 DEFAULT_BRIGHTNESS = 100
 
 

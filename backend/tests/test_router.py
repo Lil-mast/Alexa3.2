@@ -104,9 +104,36 @@ def test_users_do_not_share_device_state():
 
 
 def test_unknown_tool():
-    response = _router().execute("thermostat_set", {"target_c": 21}, _principal(*ALL_SCOPES))
+    response = _router().execute("door_unlock", {"door": "front"}, _principal(*ALL_SCOPES))
 
     assert response.status == "error"
     assert response.error is not None
     assert response.error.code is ErrorCode.NOT_FOUND
     assert response.trace == []
+
+
+def test_thermostat_set_executes():
+    state = AppState(settings=make_settings())
+    response = Router(state).execute("thermostat_set", {"zone": "office", "target_c": 22}, _principal(*ALL_SCOPES))
+
+    assert response.status == "ok"
+    assert response.speech == "Office set to 22 degrees."
+    assert "previously 21" in (response.detail or "")
+    assert response.trace[0].decision == "executed"
+
+
+def test_thermostat_unchanged_is_no_change():
+    response = _router().execute("thermostat_set", {"zone": "office", "target_c": 21}, _principal(*ALL_SCOPES))
+
+    assert response.status == "ok"
+    assert response.speech == "Office is already at 21 degrees."
+    assert response.trace[0].decision == "no_change"
+
+
+def test_thermostat_out_of_bounds():
+    response = _router().execute("thermostat_set", {"zone": "office", "target_c": 35}, _principal(*ALL_SCOPES))
+
+    assert response.status == "error"
+    assert response.error is not None
+    assert response.error.code is ErrorCode.OUT_OF_BOUNDS
+    assert "between 16 and 28 degrees Celsius" in response.error.message

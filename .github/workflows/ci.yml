@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install the locked environment
+        run: uv sync --dev --frozen
+
+      - name: requirements.txt matches uv.lock
+        # The Docker image installs requirements.txt, not uv.lock. A stale export
+        # would let CI pass while the deployed image has different packages.
+        # Export in place with the same command as the docs, then fail if the
+        # tracked file changed.
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-header -o requirements.txt
+          git diff --exit-code -- requirements.txt
+
+      - name: Lint
+        run: uv run --no-sync ruff check .
+
+      - name: Format
+        run: uv run --no-sync ruff format --check .
+
+      - name: Test
+        run: uv run --no-sync pytest -q
+
+  leaks:
+    name: Leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked and untracked files
+        run: |
+          python3 scripts/check_leaks.py --self-test
+          python3 scripts/check_leaks.py --all
+
+  docker:
+    name: Build and smoke the image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t alexa:ci backend
+
+      - name: Start and check /health
+        run: |
+          docker run -d --name alexa-ci -p 8000:8000 \
+            -e ALEXA_PUBLIC_URL=http://localhost:8000 \
+            -e ALEXA_ALLOWED_HOSTS='*' \
+            alexa:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "health check did not pass"
+          docker logs alexa-ci
+          exit 1
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f alexa-ci || true

@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Amazon user and skill identifiers. A token subject must be a pseudonym, not
+# one of these: the server never needs the raw identifier, and keeping it out of
+# logs and traces is cheaper than redacting it later.
+AMAZON_ID = re.compile(r"^amzn1\.")
 
 DEV_TOKEN_JSON = (
     '{"dev-token":{"subject":"demo-user","client_id":"alexa-demo",'
@@ -64,12 +71,44 @@ class Settings(BaseSettings):
         return f"{self.public_url.rstrip('/')}/mcp"
 
     @property
+    def is_local(self) -> bool:
+        """True for the developer origins that are safe to expose as-is."""
+        host = (urlparse(self.public_url).hostname or "").lower()
+        return host in {"localhost", "127.0.0.1", "::1", "testserver"}
+
+    @property
+    def uses_dev_token(self) -> bool:
+        """True when the token table is still the one shipped in the repository."""
+        return self.tokens_json.strip() == DEV_TOKEN_JSON
+
+    @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
     def allowed_host_list(self) -> list[str]:
         return [host.strip() for host in self.allowed_hosts.split(",") if host.strip()]
+
+
+def startup_warnings(settings: Settings) -> list[str]:
+    """Configuration that is fine locally and dangerous on a public host.
+
+    These are warnings, not startup errors. A hackathon demo should still boot
+    with the shipped token; a deployer should see the warning in the first log
+    lines and fix it before real users arrive.
+    """
+    if settings.is_local:
+        return []
+    warnings: list[str] = []
+    if settings.uses_dev_token:
+        warnings.append(
+            "ALEXA_TOKENS_JSON still contains the development token. Replace it before exposing the server."
+        )
+    if "*" in settings.allowed_host_list:
+        warnings.append("ALEXA_ALLOWED_HOSTS disables DNS-rebinding protection. Set the public hostname instead.")
+    if not settings.public_url.lower().startswith("https://"):
+        warnings.append("ALEXA_PUBLIC_URL is not HTTPS. Alexa+ requires a TLS origin in production.")
+    return warnings
 
 
 @lru_cache

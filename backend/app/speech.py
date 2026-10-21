@@ -6,6 +6,8 @@ ElevenLabs fallback reads plain text.
 
 from __future__ import annotations
 
+from datetime import date, time
+
 UNITS: tuple[tuple[int, str], ...] = ((3600, "hour"), (60, "minute"), (1, "second"))
 
 
@@ -27,3 +29,19 @@ def clock(total_seconds: int) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{seconds:02d}"
     return f"{minutes}:{seconds:02d}"
+
+
+def human_date(value: str) -> str:
+    """'2026-10-23' -> 'Friday, October 23'. Input is already validated ISO."""
+    parsed = date.fromisoformat(value)
+    return f"{parsed.strftime('%A, %B')} {parsed.day}"
+
+
+def human_time(value: str) -> str:
+    """'09:00' -> '9 AM'; '14:30' -> '2:30 PM'. Input is already validated."""
+    parsed = time.fromisoformat(value)
+    hour = parsed.hour % 12 or 12
+    suffix = "AM" if parsed.hour < 12 else "PM"
+    if parsed.minute == 0:
+        return f"{hour} {suffix}"
+    return f"{hour}:{parsed.minute:02d} {suffix}"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Query
@@ -12,12 +13,13 @@ from pydantic import AnyHttpUrl
 
 from app import __version__
 from app.auth import Principal, build_rest_auth, build_verifier
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, startup_warnings
 from app.logging_config import setup_logging
 from app.mcp_server import build_mcp_server
 from app.router import Router
+from app.rules import RULES
 from app.state import AppState
-from app.tools import REGISTRY, SCOPES, manifests
+from app.tools import REGISTRY, SCOPES, TOOLS, manifests
 from app.trace import TraceBuffer
 
 
@@ -26,7 +28,7 @@ def _transport_security(settings: Settings) -> TransportSecuritySettings:
     # "*" wildcard, so a wildcard means disabling the guard. A real deployment
     # should set the App Runner hostname and leave protection on.
     hosts = settings.allowed_host_list
-    if hosts == ["*"]:
+    if "*" in hosts:
         return TransportSecuritySettings(enable_dns_rebinding_protection=False)
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
@@ -42,6 +44,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     between cases. Production uses the module-level `app` below.
     """
     settings = settings or get_settings()
+    # A tool without a rule, or a rule without a tool, is a configuration bug.
+    # Fail at startup, not on the first voice request.
+    RULES.check_tools(TOOLS)
     verifier = build_verifier(settings)
     # One state object per app. Adapters and the trace buffer live here, so a
     # test app never shares timers or lights with the running server.
@@ -62,6 +67,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         setup_logging(settings.log_level)
+        # Public deployments fail closed only for config that is definitely
+        # wrong. These warnings cover config that is valid but unsafe, so the
+        # first log lines tell a deployer what to change.
+        startup_logger = logging.getLogger("alexa.startup")
+        for message in startup_warnings(settings):
+            startup_logger.warning("startup_warning", extra={"detail": message})
         # A mounted app's lifespan does not run automatically, and the streamable
         # session manager needs it. Start it here so sessions have a manager.
         async with mcp_app.router.lifespan_context(mcp_app):
@@ -118,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ok",
             "service": "alexa",
             "version": __version__,
+            "rules_version": RULES.version,
             "tools": len(REGISTRY),
         }
 
@@ -129,8 +141,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/tools", tags=["console"])
     async def list_tools(_: Principal = Depends(require_principal)) -> dict:
         # Manifests only, never handlers. The console renders risk, scopes, and
-        # bounds from this payload.
-        return {"tools": manifests()}
+        # bounds from this payload. The rules version is part of the response so
+        # reviewers can see which rule set approved an action.
+        return {
+            "rules_version": RULES.version,
+            "confirmation_ttl_seconds": RULES.confirmation.ttl_seconds,
+            "tools": manifests(),
+        }
 
     @app.get("/api/trace", tags=["console"])
     async def get_trace(

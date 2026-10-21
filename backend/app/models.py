@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -57,8 +57,18 @@ class ToolError(BaseModel):
         *,
         field: str | None = None,
         allowed: list[int | str] | None = None,
+        follow_up: str | None = None,
     ) -> ToolError:
-        return cls(code=code, message=message, field=field, allowed=allowed, follow_up=FOLLOW_UP[code])
+        # follow_up defaults to the taxonomy in STANDARD.md. A tool may narrow it
+        # when the generic instruction would be unhelpful, for example when a
+        # confirmation token no longer matches the parameters.
+        return cls(
+            code=code,
+            message=message,
+            field=field,
+            allowed=allowed,
+            follow_up=follow_up or FOLLOW_UP[code],
+        )
 
 
 class TraceEvent(BaseModel):
@@ -79,12 +89,26 @@ class TraceEvent(BaseModel):
     speech: str
 
 
+class Preview(BaseModel):
+    """What a medium or high risk action would do, rendered by Alexa+.
+
+    The token is deliberately separate from the preview: the preview is safe to
+    show the user, while the token is the capability that authorizes execution.
+    """
+
+    service: str
+    tool: str
+    params: dict[str, Any]
+    effect: str
+    irreversible: bool
+
+
 class ToolResponse(BaseModel):
     """The single response shape for MCP tools and the console.
 
     `confirmation_required` is deliberately not an error: nothing has executed
-    yet and the client should present a preview. `audit_id` stays null until the
-    hash-chained audit log lands on Day 3.
+    yet and the client should present the preview and ask the user. `audit_id`
+    stays null until the hash-chained audit log lands on Day 3.
     """
 
     status: Literal["ok", "confirmation_required", "error"]
@@ -93,19 +117,21 @@ class ToolResponse(BaseModel):
     trace: list[TraceEvent] = Field(default_factory=list)
     audit_id: str | None = None
     error: ToolError | None = None
-
-
-class Bounds(BaseModel):
-    min: int
-    max: int
+    preview: Preview | None = None
+    confirmation_token: str | None = None
 
 
 @dataclass(frozen=True)
 class HandlerResult:
-    """What a tool handler returns before the router adds trace and status."""
+    """What a tool handler returns before the router adds trace and status.
+
+    `no_change` is an outcome, not a failure: the request was valid, and the
+    state already matched it. STANDARD.md asks for that to be visible.
+    """
 
     speech: str
     detail: str | None = None
+    decision: Literal["executed", "no_change"] = "executed"
 
 
 class RuleViolation(Exception):

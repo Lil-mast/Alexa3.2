@@ -1,4 +1,6 @@
-"""One execution path for MCP calls and tests: auth, rules, adapter, response, trace."""
+"""One execution path for MCP calls and tests: auth, rules, confirmation, adapter,
+response, trace.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +10,9 @@ from typing import Literal
 
 from app.auth import Principal
 from app.canonical import params_hash
-from app.models import ErrorCode, RuleViolation, ToolError, ToolResponse
-from app.rules import validate_params
+from app.confirm import TokenStatus
+from app.models import ErrorCode, Preview, RuleViolation, ToolError, ToolResponse
+from app.rules import RULES, validate_params
 from app.state import AppState
 from app.tools import HANDLERS, REGISTRY
 from app.tools.specs import ToolSpec
@@ -20,15 +23,23 @@ logger = logging.getLogger("alexa.calls")
 class Router:
     """The only path from a tool call to an adapter.
 
-    Order matters: identity, then scope, then parameters, then execution, then
-    trace. Auth comes before validation so an unauthenticated caller cannot use
-    error messages to learn the schema.
+    Order matters: identity, then scope, then parameters, then confirmation, then
+    execution, then trace. Auth comes before validation so an unauthenticated
+    caller cannot use error messages to learn the schema. Confirmation comes
+    after validation so a preview always describes a request that passed the
+    rules.
     """
 
     def __init__(self, state: AppState) -> None:
         self._state = state
 
-    def execute(self, tool_name: str, params: dict, principal: Principal | None) -> ToolResponse:
+    def execute(
+        self,
+        tool_name: str,
+        params: dict,
+        principal: Principal | None,
+        confirmation_token: str | None = None,
+    ) -> ToolResponse:
         # One timer for the whole path; the trace reports the wall time Alexa+
         # experiences, including validation but not network time.
         started = time.perf_counter()
@@ -51,7 +62,8 @@ class Router:
             )
 
         # The MCP endpoint proves the token is valid. This proves the token may
-        # use this specific tool. A read-only token should not set timers.
+        # use this specific tool. A read-only token should not set timers, and a
+        # confirmation must not bypass the scope check.
         missing = [scope for scope in spec.scopes if scope not in principal.scopes]
         if missing:
             logger.warning(
@@ -76,12 +88,37 @@ class Router:
             # untouched and the refusal is still visible in the trace.
             return self._refuse(spec, principal, params, violation.error, started)
 
+        # Medium and high risk actions split into two calls: preview, then
+        # execute with the token issued by that preview. Nothing below the token
+        # check runs on the first call.
+        requires_confirmation = spec.risk in {"medium", "high"}
+        if requires_confirmation:
+            if not confirmation_token or not confirmation_token.strip():
+                return self._preview(spec, principal, clean, started)
+            status = self._state.confirmations.verify(
+                confirmation_token.strip(),
+                subject=principal.subject,
+                tool=spec.name,
+                params_hash=params_hash(clean),
+            )
+            if status is not TokenStatus.OK:
+                logger.warning(
+                    "confirmation_rejected",
+                    extra={
+                        "tool": spec.name,
+                        "subject": principal.subject,
+                        "reason": status.value,
+                        "params_hash": params_hash(clean),
+                    },
+                )
+                return self._refuse(spec, principal, clean, self._token_error(status), started)
+
         try:
             # Handlers receive only validated, authorized, normalised parameters.
             # They own the state change and the wording; the router owns the rest.
             result = HANDLERS[spec.name](clean, principal, self._state)
         except RuleViolation as violation:
-            return self._refuse(spec, principal, params, violation.error, started)
+            return self._refuse(spec, principal, clean, violation.error, started)
         except Exception:
             # Adapter failures map to one stable code. The exception text stays in
             # the log; Alexa+ is told the service failed, never that it worked.
@@ -89,13 +126,83 @@ class Router:
             return self._refuse(
                 spec,
                 principal,
-                params,
+                clean,
                 ToolError.of(ErrorCode.UPSTREAM_ERROR, "The service did not respond correctly."),
                 started,
             )
 
+        if requires_confirmation:
+            # Consume only after the adapter ran. A failed execution leaves the
+            # token usable for a retry instead of forcing a new preview.
+            self._state.confirmations.consume(confirmation_token or "")
+
         response = ToolResponse(status="ok", speech=result.speech, detail=result.detail)
-        return self._finish(spec, principal, params, response, started, decision="executed")
+        return self._finish(spec, principal, clean, response, started, decision=result.decision)
+
+    def _preview(
+        self,
+        spec: ToolSpec,
+        principal: Principal,
+        clean: dict,
+        started: float,
+    ) -> ToolResponse:
+        """Issue a token and describe the action without running it."""
+        clean_hash = params_hash(clean)
+        record = self._state.confirmations.issue(
+            subject=principal.subject,
+            tool=spec.name,
+            params_hash=clean_hash,
+        )
+        effect = self._effect(spec, clean)
+        response = ToolResponse(
+            status="confirmation_required",
+            speech=f"{effect}. Should I go ahead?",
+            detail=(
+                "Nothing has happened yet. This action is reversible."
+                if spec.reversible
+                else "Nothing has happened yet. This action cannot be undone."
+            ),
+            preview=Preview(
+                service=spec.service,
+                tool=spec.name,
+                params=clean,
+                effect=effect,
+                irreversible=not spec.reversible,
+            ),
+            confirmation_token=record.token,
+        )
+        return self._finish(spec, principal, clean, response, started, decision="previewed")
+
+    def _effect(self, spec: ToolSpec, clean: dict) -> str:
+        # Enum labels and human dates make the preview speakable. If a template
+        # does not match the parameters, fall back to a plain description rather
+        # than failing the call.
+        if not spec.confirmation_template:
+            return f"Run {spec.name}"
+        values = RULES.display_params(spec.name, clean)
+        try:
+            return spec.confirmation_template.format(**values).rstrip(".")
+        except (KeyError, IndexError):
+            return f"Run {spec.name}"
+
+    def _token_error(self, status: TokenStatus) -> ToolError:
+        # Each failure maps to a taxonomy code so Alexa+ knows whether to start
+        # over or ask a different question.
+        if status is TokenStatus.CONSUMED:
+            return ToolError.of(
+                ErrorCode.TOKEN_CONSUMED,
+                "That confirmation was already used. Start a new request.",
+            )
+        if status is TokenStatus.MISMATCH:
+            return ToolError.of(
+                ErrorCode.INVALID_PARAM,
+                "The request changed since it was previewed.",
+                follow_up="Start the action again so the user can confirm the new details.",
+            )
+        return ToolError.of(
+            ErrorCode.TOKEN_EXPIRED,
+            "That confirmation has expired or is no longer valid. Start a new request.",
+        )
 
     def _refuse(
         self,
@@ -142,6 +249,7 @@ class Router:
             extra={
                 "tool": spec.name,
                 "service": spec.service,
+                "risk": spec.risk,
                 "subject": event.subject,
                 "status": response.status,
                 "decision": decision,

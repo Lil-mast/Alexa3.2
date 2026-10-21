@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from app.auth import Principal
-from app.models import Bounds, HandlerResult
+from app.models import HandlerResult
 from app.speech import clock, human_duration
 from app.state import AppState
 from app.tools.specs import ToolSpec
 
 # Alexa+ chooses tools from this description, so it names the unit conversion
-# (seconds) and the cases this tool must not handle (alarms, cancelling).
+# (seconds) and the cases this tool must not handle (alarms, cancelling). The
+# duration bounds live in rules.yaml.
 SPEC = ToolSpec(
     name="timer_set",
+    title="Set a timer",
     description=(
         "Set a countdown timer for the user. Use when the user asks to time something, for example "
         "'set a ten-minute timer' or 'timer for the pasta'. The duration is in seconds, so convert "
@@ -25,9 +27,6 @@ SPEC = ToolSpec(
     compensator="timer_cancel",
     required=["duration_seconds"],
     optional=["label"],
-    bounds={"duration_seconds": Bounds(min=1, max=86_400)},
-    field_labels={"duration_seconds": "Timer duration", "label": "Timer label"},
-    bounds_display={"duration_seconds": "between 1 second and 24 hours"},
 )
 
 

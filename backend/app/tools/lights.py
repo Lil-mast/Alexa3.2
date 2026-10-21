@@ -4,32 +4,30 @@ from __future__ import annotations
 
 from app.adapters.lights import ROOMS
 from app.auth import Principal
-from app.models import Bounds, ErrorCode, HandlerResult, RuleViolation, ToolError
+from app.models import ErrorCode, HandlerResult, RuleViolation, ToolError
 from app.state import AppState
 from app.tools.specs import ToolSpec
 
 # Same rule as the timer: the description is prompt text for tool selection. It
 # spells out that "on", "brightness", or both are valid, and that rooms are a
-# closed set.
+# closed set. The accepted values themselves live in rules.yaml.
 SPEC = ToolSpec(
     name="lights_set",
+    title="Set room lights",
     description=(
         "Set a room's lights: turn them on or off, set a brightness percentage, or both. Use when "
         "the user asks to change lighting, for example 'dim the living room lights to 30 percent'. "
-        "Brightness is 0 to 100, where 0 is off. Only the four declared rooms exist; do not guess a "
-        "room the user did not name."
+        "Brightness is 0 to 100, where 0 is off. Only these rooms exist: living room, bedroom, "
+        "kitchen, office. Do not guess a room the user did not name."
     ),
     service="lights",
     scopes=["home:lights:write"],
     risk="low",
     reversible=True,
+    idempotent=True,
     compensator="lights_restore",
     required=["room"],
     optional=["on", "brightness"],
-    booleans=["on"],
-    enums={"room": list(ROOMS)},
-    bounds={"brightness": Bounds(min=0, max=100)},
-    field_labels={"room": "Room", "on": "Power", "brightness": "Brightness"},
 )
 
 

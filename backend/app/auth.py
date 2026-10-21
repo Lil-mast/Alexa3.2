@@ -19,7 +19,7 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.routes import build_resource_metadata_url
 from pydantic import AnyHttpUrl, BaseModel, ValidationError
 
-from app.config import Settings
+from app.config import AMAZON_ID, Settings
 
 
 class TokenRecord(BaseModel):
@@ -53,9 +53,21 @@ def parse_tokens(raw: str) -> dict[str, TokenRecord]:
     if not isinstance(payload, dict) or not payload:
         raise ValueError("ALEXA_TOKENS_JSON must be a non-empty object mapping token to record")
     try:
-        return {token: TokenRecord.model_validate(record) for token, record in payload.items()}
+        tokens = {token: TokenRecord.model_validate(record) for token, record in payload.items()}
     except ValidationError as exc:
         raise ValueError(f"ALEXA_TOKENS_JSON has an invalid record: {exc}") from exc
+    # The subject is the only stable user key the server stores, logs, and later
+    # audits. A raw Alexa id there would spread throughout the trace and the
+    # audit chain, so refuse it at the boundary and ask for a pseudonym instead.
+    for record in tokens.values():
+        if not record.subject.strip():
+            raise ValueError("ALEXA_TOKENS_JSON records need a non-empty subject")
+        if AMAZON_ID.match(record.subject):
+            raise ValueError(
+                "ALEXA_TOKENS_JSON subject must be a pseudonym, not a raw Alexa id. "
+                "Hash the Alexa id before putting it in the token table."
+            )
+    return tokens
 
 
 class StaticTokenVerifier(TokenVerifier):

@@ -1,0 +1,106 @@
+# Versioned rules for every tool Alexa exposes.
+#
+# This file is the reviewed source of truth for what a tool accepts. Code owns
+# identity, risk, and scopes; the rules own value constraints. Bump `version`
+# whenever a bound, enum, or default changes: the audit log records the version
+# that approved each action.
+#
+# Field keys must be quoted when YAML would read them as booleans: `on`, `off`,
+# `yes`, `no`. PyYAML uses YAML 1.1, where an unquoted `on:` key becomes True.
+
+version: "2"
+
+# Single-use confirmation tokens (BUILD_PLAN.md section 3).
+confirmation:
+  ttl_seconds: 300
+
+tools:
+  timer_set:
+    fields:
+      duration_seconds:
+        type: integer
+        min: 1
+        max: 86400
+        display: "between 1 second and 24 hours"
+        label: Timer duration
+      label:
+        type: string
+        max_length: 64
+        label: Timer label
+
+  lights_set:
+    fields:
+      room:
+        type: string
+        enum: [living_room, bedroom, kitchen, office]
+        enum_labels:
+          living_room: living room
+          bedroom: bedroom
+          kitchen: kitchen
+          office: office
+        label: Room
+      "on":
+        type: boolean
+        label: Power
+      brightness:
+        type: integer
+        min: 0
+        max: 100
+        label: Brightness
+
+  thermostat_set:
+    fields:
+      zone:
+        type: string
+        enum: [living_room, bedroom, kitchen, office]
+        enum_labels:
+          living_room: living room
+          bedroom: bedroom
+          kitchen: kitchen
+          office: office
+        label: Zone
+      target_c:
+        type: integer
+        min: 16
+        max: 28
+        display: "between 16 and 28 degrees Celsius"
+        label: Temperature
+
+  book_room:
+    fields:
+      room:
+        type: string
+        enum: [oak, cedar, maple]
+        enum_labels:
+          oak: Oak
+          cedar: Cedar
+          maple: Maple
+        label: Room
+        default: oak
+      date:
+        type: string
+        format: date
+        not_past: true
+        label: Date
+      start_time:
+        type: string
+        format: time
+        label: Start time
+        default: "09:00"
+      duration_minutes:
+        type: integer
+        min: 15
+        max: 480
+        display: "between 15 minutes and 8 hours"
+        label: Duration
+        default: 60
+      guests:
+        type: integer
+        min: 1
+        max: 12
+        label: Guests
+        default: 1
+      title:
+        type: string
+        max_length: 64
+        label: Title

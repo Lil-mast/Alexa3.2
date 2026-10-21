@@ -1,0 +1,22 @@
+#!/bin/sh
+# Refuse a commit that carries your deployment URL, an AWS account id, an Alexa
+# skill id, a token, or a key. Enable once per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# Skip a single commit only for a documented false positive:
+#
+#     git commit --no-verify
+#
+# The scanner reads the staged index, so it checks what the commit would
+# actually contain, not the working tree.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 "$root/scripts/check_leaks.py"
+fi
+
+echo "check_leaks skipped: python3 is not on PATH for this git client." >&2
+exit 0

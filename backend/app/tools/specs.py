@@ -6,19 +6,24 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import Bounds
-
 
 class ToolSpec(BaseModel):
     """The manifest contract from STANDARD.md section 2.
 
     Frozen so a long-running process cannot mutate a manifest under itself. To
     change a tool's behavior, change the code and redeploy.
+
+    Value constraints (types, bounds, enums, defaults) live in the versioned
+    `app/rules/rules.yaml`, not here. This object says what the tool is and who
+    may call it; the rules file says which values are acceptable.
     """
 
     model_config = ConfigDict(frozen=True)
 
     name: str
+    # Human-readable title for clients that render a tool picker. Kept beside
+    # the name so the MCP annotation and the console manifest cannot drift.
+    title: str
     version: str = "1"
     # Descriptions are tool-selection prompt text for Alexa+. State when to use
     # the tool and, just as important, when not to.
@@ -27,18 +32,14 @@ class ToolSpec(BaseModel):
     scopes: list[str]
     risk: Literal["low", "medium", "high"]
     reversible: bool
+    # True when repeating the same call with the same parameters leaves the
+    # same state. MCP clients use this hint when deciding whether a retry is
+    # safe after a timeout.
+    idempotent: bool = False
     # Tool that undoes this one. Day 3 resolves it through the audit log.
     compensator: str | None = None
     required: list[str] = Field(default_factory=list)
     optional: list[str] = Field(default_factory=list)
-    booleans: list[str] = Field(default_factory=list)
-    # Declared ranges and enumerations. rules.py enforces them before an adapter
-    # runs; they are part of the public contract, not just documentation.
-    bounds: dict[str, Bounds] = Field(default_factory=dict)
-    enums: dict[str, list[str]] = Field(default_factory=dict)
-    # Presentation-only maps: friendlier field names and spoken range text.
-    field_labels: dict[str, str] = Field(default_factory=dict)
-    bounds_display: dict[str, str] = Field(default_factory=dict)
     confirmation_template: str | None = None
     # Privacy gate for Day 3: external tools are refused when the user turns off
     # third-party sharing.
@@ -48,9 +49,4 @@ class ToolSpec(BaseModel):
 
     def manifest(self) -> dict[str, Any]:
         """Public metadata for `tools/list` extras, the console, and certification."""
-        payload = self.model_dump(mode="json")
-        # These two maps only shape spoken error messages. Clients do not need
-        # them, and leaving them out keeps the console payload smaller.
-        payload.pop("field_labels", None)
-        payload.pop("bounds_display", None)
-        return payload
+        return self.model_dump(mode="json")
