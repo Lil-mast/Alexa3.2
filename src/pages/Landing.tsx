@@ -83,7 +83,7 @@ export default function Landing() {
   const sessionNote = session.checking
     ? "Checking your session"
     : session.destination === "demo"
-      ? "Session verified — the house is unlocked"
+      ? "Session verified, the house is unlocked"
       : "A valid session opens the house directly";
 
   return (
@@ -94,11 +94,12 @@ export default function Landing() {
 
       <header className="lp-header">
         <div className="lp-container lp-header-inner">
-          <a className="lp-brand" href="#/" aria-label="Alexa home">
+          <a className="lp-brand" href="#/" aria-label="Alexa 3.5 home">
             <span className="lp-brand-mark" aria-hidden="true">
               ✳
             </span>
             <span>Alexa</span>
+            <span className="lp-brand-version">3.5</span>
           </a>
 
           <nav className="lp-nav" aria-label="Landing sections">
@@ -144,8 +145,8 @@ export default function Landing() {
               </h1>
 
               <p className="lp-lede">
-                Alexa turns what you say into exact actions. Rules decide, confirmations guard the
-                risky ones, and a hash chain proves every move. The language model handles meaning —
+                Alexa 3.5 turns what you say into exact actions. Rules decide, confirmations guard the
+                risky ones, and a hash chain proves every move. The language model handles meaning,
                 not your lights, climate, or calendar.
               </p>
 
@@ -211,7 +212,7 @@ export default function Landing() {
                 <span className="lp-mono-label">You</span>
                 <p>“Dim the living room to thirty percent.”</p>
                 <small>
-                  <span className="lp-inline-dot" /> lights_set · 30 within 1–100 · 9 ms
+                  <span className="lp-inline-dot" /> lights_set · 30 within 1 to 100 · 9 ms
                 </small>
               </div>
             </div>
@@ -264,7 +265,7 @@ export default function Landing() {
             <div className="lp-problem-grid">
               <article className="lp-problem-card lp-problem-card-model">
                 <div className="lp-card-topline">
-                  <span>A — It improvises</span>
+                  <span>Case A, it improvises</span>
                   <span className="lp-card-number">01</span>
                 </div>
                 <h3>A timer is not a suggestion.</h3>
@@ -288,7 +289,7 @@ export default function Landing() {
 
               <article className="lp-problem-card lp-problem-card-memory">
                 <div className="lp-card-topline">
-                  <span>B — It forgets</span>
+                  <span>Case B, it forgets</span>
                   <span className="lp-card-number">02</span>
                 </div>
                 <h3>A mistake with no receipt.</h3>
@@ -303,7 +304,7 @@ export default function Landing() {
                   </div>
                   <div className="lp-receipt-row">
                     <span>Who approved it</span>
-                    <span className="lp-missing">—</span>
+                    <span className="lp-missing">not logged</span>
                   </div>
                   <div className="lp-receipt-row">
                     <span>Audit row</span>
@@ -311,7 +312,7 @@ export default function Landing() {
                   </div>
                   <div className="lp-receipt-row">
                     <span>Undo</span>
-                    <span className="lp-missing">—</span>
+                    <span className="lp-missing">none</span>
                   </div>
                 </div>
               </article>
@@ -334,13 +335,13 @@ export default function Landing() {
                 <span id="split-title">
                   Alexa+ interprets.
                   <br />
-                  Alexa <em>decides.</em>
+                  Alexa 3.5 <em>decides.</em>
                 </span>
               }
             >
               <p>
-                Two jobs, two engines. Alexa+ owns the conversation and its interface. Alexa owns
-                the deterministic execution underneath it.
+                Two jobs, two engines. Alexa+ owns the conversation and its interface. Alexa 3.5
+                owns the deterministic execution underneath it.
               </p>
             </SectionHead>
 
@@ -357,14 +358,14 @@ export default function Landing() {
                       <span className="lp-col-note">Conversation</span>
                     </th>
                     <th scope="col">
-                      <span className="lp-col-name">Alexa</span>
+                      <span className="lp-col-name">Alexa 3.5</span>
                       <span className="lp-col-note">Rules layer</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    ["Understand the request", "Interprets", "—"],
+                    ["Understand the request", "Interprets", "not involved"],
                     ["Choose the action", "Suggests a tool", "Validates the call"],
                     ["Change device state", "Never", "Only through rules"],
                     ["Handle risk", "Shows the preview", "Issues a one-use token"],
@@ -424,7 +425,7 @@ export default function Landing() {
                   number: "02",
                   tag: "Decide",
                   title: "Check before anything moves",
-                  copy: "Scopes, bounds, privacy, and risk are checked first. A value outside 16–28 °C is refused with the range, not rounded into place.",
+                  copy: "Scopes, bounds, privacy, and risk are checked first. A value outside 16 to 28 °C is refused with the range, not rounded into place.",
                 },
                 {
                   number: "03",
@@ -465,7 +466,7 @@ export default function Landing() {
                 <dl className="lp-trace-lines">
                   <div>
                     <dt>Rule</dt>
-                    <dd>lights_set · brightness 30 · within 1–100</dd>
+                    <dd>lights_set · brightness 30 · within 1 to 100</dd>
                   </div>
                   <div>
                     <dt>Do</dt>
@@ -618,7 +619,7 @@ export default function Landing() {
                   </div>
                   <div>
                     <dt>First bad</dt>
-                    <dd>—</dd>
+                    <dd>none</dd>
                   </div>
                 </dl>
                 <div className="lp-chain-row">
@@ -718,8 +719,8 @@ export default function Landing() {
             <div className="lp-faq-list">
               {[
                 {
-                  q: "Is Alexa a replacement for Alexa+?",
-                  a: "No. Alexa is an MCP server and rules layer that Alexa+ calls. Alexa+ owns the conversation, the voice, and its own interface. Alexa owns the deterministic action underneath.",
+                  q: "Is Alexa 3.5 a replacement for Alexa+?",
+                  a: "No. Alexa 3.5 is an MCP server and rules layer that Alexa+ calls. Alexa+ owns the conversation, the voice, and its own interface. Alexa owns the deterministic action underneath.",
                 },
                 {
                   q: "What happens when it doesn't understand?",
@@ -731,7 +732,7 @@ export default function Landing() {
                 },
                 {
                   q: "Can I undo anything?",
-                  a: "Reversible actions — lights, climate, timers, and bookings — expose a compensating action. The undo is its own audit row linked to the original. Irreversible actions are marked as such before confirmation.",
+                  a: "Reversible actions (lights, climate, timers, and bookings) expose a compensating action. The undo is its own audit row linked to the original. Irreversible actions are marked as such before confirmation.",
                 },
                 {
                   q: "What leaves the house?",
@@ -775,11 +776,11 @@ export default function Landing() {
             </h2>
             <p className="lp-cta-copy">
               Set a timer, dim a room, push the thermostat out of range, book the Oak room, then ask
-              for the undo. The house will do exactly what the rules allow — and show you why.
+              for the undo. The house will do exactly what the rules allow, and show you why.
             </p>
             <div className="lp-cta-actions">
               <a
-                className="lp-button lp-button-large lp-button-on-orange"
+                className="lp-button lp-button-large lp-button-ink"
                 href={session.href}
                 onClick={session.open}
               >
@@ -804,6 +805,7 @@ export default function Landing() {
                 ✳
               </span>
               <span>Alexa</span>
+              <span className="lp-brand-version">3.5</span>
             </a>
             <nav className="lp-footer-nav" aria-label="Footer">
               <a href="#problem">Problem</a>
@@ -820,7 +822,7 @@ export default function Landing() {
           </div>
 
           <div className="lp-footer-bottom">
-            <p>© 2026 Alexa demo. Not affiliated with Amazon. Alexa+ is a trademark of Amazon.</p>
+            <p>© 2026 Alexa 3.5 demo. Not affiliated with Amazon. Alexa+ is a trademark of Amazon.</p>
             <p>
               Warm paper, deterministic rules, no dark mode. <a href="#/console">Operator view ↗</a>
             </p>

@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 
 import ConsoleApp from "./ConsoleApp";
+import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import ComingSoon from "./pages/ComingSoon";
 import Landing from "./pages/Landing";
 
 type Route =
   | { name: "landing" }
   | { name: "console" }
+  | { name: "signup" }
+  | { name: "login" }
+  | { name: "callback" }
   | { name: "soon"; path: string };
 
 /**
@@ -22,26 +27,42 @@ function readRoute(): Route {
     return { name: "landing" };
   }
 
+  // The query lives inside the hash, for example
+  // `#/auth/callback?code=...&next=/demo`. The route is the path in front of it.
   const raw = hash.replace(/^#\/?/, "");
-  if (!raw || raw === "/") {
-    return { name: "landing" };
+  const path = raw.split("?")[0].replace(/\/+$/, "");
+
+  switch (path) {
+    case "":
+      return { name: "landing" };
+    case "console":
+      return { name: "console" };
+    case "signup":
+      return { name: "signup" };
+    case "login":
+      return { name: "login" };
+    case "auth/callback":
+      return { name: "callback" };
+    default:
+      // The console keeps its own sub-screens, for example #/console/audit.
+      return path.startsWith("console/") ? { name: "console" } : { name: "soon", path };
   }
-  if (raw === "console" || raw.startsWith("console/")) {
-    return { name: "console" };
-  }
-  return { name: "soon", path: raw };
 }
+
+const TITLES: Record<Route["name"], string> = {
+  landing: "Alexa 3.5, your voice assistant should never guess",
+  console: "Alexa 3.5 Console, under the hood",
+  signup: "Sign up, Alexa 3.5",
+  login: "Log in, Alexa 3.5",
+  callback: "Signing you in, Alexa 3.5",
+  soon: "Alexa 3.5, next in the build",
+};
 
 export default function App() {
   const [route, setRoute] = useState<Route>(readRoute);
 
   useEffect(() => {
-    document.title =
-      route.name === "console"
-        ? "Alexa Console — Under the hood"
-        : route.name === "soon"
-          ? "Alexa — Next in the build"
-          : "Alexa — Your voice assistant should never guess";
+    document.title = TITLES[route.name];
   }, [route]);
 
   useEffect(() => {
@@ -61,11 +82,18 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  if (route.name === "console") {
-    return <ConsoleApp />;
+  switch (route.name) {
+    case "console":
+      return <ConsoleApp />;
+    case "signup":
+      return <Auth mode="signup" />;
+    case "login":
+      return <Auth mode="login" />;
+    case "callback":
+      return <AuthCallback />;
+    case "soon":
+      return <ComingSoon path={route.path} />;
+    default:
+      return <Landing />;
   }
-  if (route.name === "soon") {
-    return <ComingSoon path={route.path} />;
-  }
-  return <Landing />;
 }

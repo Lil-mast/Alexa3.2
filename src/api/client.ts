@@ -1,3 +1,5 @@
+import { readSessionToken } from "../auth/session";
+import { API_BASE } from "./base";
 import type {
   AuditList,
   AuditVerify,
@@ -8,7 +10,6 @@ import type {
   AssistantReply,
 } from "./types";
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
 const TOKEN_KEY = "alexa.console.token";
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -19,9 +20,17 @@ const REQUEST_TIMEOUT_MS = 8_000;
  * for a deployed build.
  */
 export function readToken(): string {
-  const stored = window.sessionStorage.getItem(TOKEN_KEY) ?? "";
-  if (stored) {
-    return stored;
+  // An operator token pasted into the console wins, because it is the
+  // deliberate choice for that screen.
+  const operator = window.sessionStorage.getItem(TOKEN_KEY) ?? "";
+  if (operator) {
+    return operator;
+  }
+  // Otherwise the signed-in browser session works, so "under the hood" needs
+  // no second credential.
+  const session = readSessionToken();
+  if (session) {
+    return session;
   }
   return import.meta.env.VITE_CONSOLE_TOKEN ?? "";
 }

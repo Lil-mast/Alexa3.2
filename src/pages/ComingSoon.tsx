@@ -7,28 +7,6 @@ interface PageCopy {
 }
 
 const COPY: Record<string, PageCopy> = {
-  signup: {
-    eyebrow: "Sign up",
-    title: (
-      <>
-        One Google tap,
-        <br />
-        then the <em>house.</em>
-      </>
-    ),
-    body: "This page is next in the build order. It will carry the Google button and the privacy note, then hand the browser to the live house simulation.",
-  },
-  login: {
-    eyebrow: "Log in",
-    title: (
-      <>
-        Welcome
-        <br />
-        <em>back.</em>
-      </>
-    ),
-    body: "This page is next in the build order. It will carry the Google button and a link to signup.",
-  },
   demo: {
     eyebrow: "Demo",
     title: (
@@ -38,7 +16,7 @@ const COPY: Record<string, PageCopy> = {
         <em>next.</em>
       </>
     ),
-    body: "The protected simulation is next in the build order. Lights, climate, timers, bookings, confirmations, and undo will all run through the real rules engine.",
+    body: "The protected simulation comes next in the build order. Lights, climate, timers, bookings, confirmations, and undo will all run through the real rules engine.",
   },
   account: {
     eyebrow: "Account",
@@ -46,21 +24,10 @@ const COPY: Record<string, PageCopy> = {
       <>
         Your session,
         <br />
-        <em>in one place.</em>
+        in one <em>place.</em>
       </>
     ),
-    body: "Demo house resets after inactivity or redeploy. Your account and sign-in stay.",
-  },
-  "auth/callback": {
-    eyebrow: "Auth callback",
-    title: (
-      <>
-        Exchanging
-        <br />
-        the <em>code.</em>
-      </>
-    ),
-    body: "This route is next in the build order. It will read the one-time code from the hash, remove it with history.replaceState, exchange it for a session token, then route to the demo.",
+    body: "The protected account page comes next in the build order. It will show the signed-in identity and the controls that belong to it.",
   },
 };
 
@@ -73,7 +40,7 @@ const FALLBACK: PageCopy = {
       <em>next.</em>
     </>
   ),
-  body: "The landing page is the first step of the build. The rest of the routes are queued behind it.",
+  body: "The landing page, the sign-in pages, and the callback are done. The rest of the routes are queued behind them.",
 };
 
 export default function ComingSoon({ path }: { path: string }) {
@@ -83,14 +50,15 @@ export default function ComingSoon({ path }: { path: string }) {
     <div className="lp lp-soon">
       <header className="lp-header">
         <div className="lp-container lp-header-inner">
-          <a className="lp-brand" href="#/" aria-label="Alexa home">
+          <a className="lp-brand" href="#/" aria-label="Alexa 3.5 home">
             <span className="lp-brand-mark" aria-hidden="true">
               ✳
             </span>
             <span>Alexa</span>
+            <span className="lp-brand-version">3.5</span>
           </a>
           <div className="lp-header-actions">
-            <a className="lp-quiet-link" href="#/console">
+            <a className="lp-quiet-link lp-hide-mobile" href="#/console">
               Under the hood
             </a>
             <a className="lp-button lp-button-small" href="#/">

@@ -40,6 +40,10 @@ class ConfigView(BaseModel):
     frontend_url: str
     session_ttl_seconds: int
     dev_login: bool
+    # The names of the settings that are absent, never their values. A blank
+    # client id is the most common reason the sign-in button stays greyed out,
+    # and "enabled: false" on its own tells the operator nothing.
+    missing: list[str] = []
 
 
 class ExchangeRequest(BaseModel):
@@ -125,12 +129,18 @@ def build_auth_router(settings: Settings, service: AuthService, require_principa
     @api.get("/config", response_model=ConfigView)
     def config(response: Response) -> ConfigView:
         _no_store(response)
+        missing = []
+        if not settings.google_client_id:
+            missing.append("ALEXA_GOOGLE_CLIENT_ID")
+        if not settings.google_client_secret:
+            missing.append("ALEXA_GOOGLE_CLIENT_SECRET")
         return ConfigView(
             enabled=service.google_enabled,
             login_url="/api/auth/google/start" if service.google_enabled else None,
             frontend_url=settings.frontend_origin,
             session_ttl_seconds=settings.session_ttl_seconds,
             dev_login=service.dev_login_enabled,
+            missing=missing,
         )
 
     # Two spellings are kept on purpose: `/google/start` is the name the console

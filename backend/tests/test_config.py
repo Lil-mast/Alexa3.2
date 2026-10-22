@@ -32,6 +32,8 @@ def test_public_server_with_real_settings_is_quiet():
         public_url="https://alexa.example.com",
         tokens_json=tokens,
         allowed_hosts="alexa.example.com",
+        google_client_id="real-client-id",
+        google_client_secret="real-client-secret",
     )
 
     assert startup_warnings(settings) == []

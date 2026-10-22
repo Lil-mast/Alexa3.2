@@ -536,7 +536,12 @@ should still start. In the Vercel path the browser never loads that mount.
 - [x] Public landing page at `/`: warm editorial layout, Alexa+ comparison,
       problem, solution flow, proof, FAQ, and a session-aware CTA that goes to
       `#/demo` only after the server validates the stored session.
-- [ ] Signup, login, and the `#/auth/callback` exchange.
+- [x] Signup, login, and the `#/auth/callback` exchange. The callback removes
+      the one-time code with `history.replaceState`, trades it for a session
+      token, and stores the token in `sessionStorage`.
+- [ ] The protected house simulation at `#/demo`, with the voice screen that
+      used to sit in the console.
+- [ ] The protected account page at `#/account`.
 - [ ] Trace screen with filters, pause, and the empty state.
 - [ ] Audit screen with the chain badge and the undo button.
 - [ ] `POST /api/call/{tool}` plus the Privacy screen.

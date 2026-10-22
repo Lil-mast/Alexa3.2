@@ -181,9 +181,26 @@ def startup_warnings(settings: Settings) -> list[str]:
     with the shipped token; a deployer should see the warning in the first log
     lines and fix it before real users arrive.
     """
-    if settings.is_local:
-        return []
     warnings: list[str] = []
+
+    # A blank client id or secret is the most common reason the sign-in button
+    # stays greyed out, and it is invisible from the browser. Say it at boot.
+    missing = [
+        name
+        for name, value in (
+            ("ALEXA_GOOGLE_CLIENT_ID", settings.google_client_id),
+            ("ALEXA_GOOGLE_CLIENT_SECRET", settings.google_client_secret),
+        )
+        if not value
+    ]
+    if missing:
+        warnings.append(
+            f"Google sign-in is disabled. {', '.join(missing)} {'' if len(missing) == 1 else 'are'} empty on the API."
+        )
+
+    if settings.is_local:
+        return warnings
+
     if settings.uses_dev_token:
         warnings.append(
             "ALEXA_TOKENS_JSON still contains the development token. Replace it before exposing the server."

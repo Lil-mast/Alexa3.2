@@ -3,13 +3,13 @@ import type { FormEvent } from "react";
 
 import { ApiError, api, readToken, writeToken } from "./api/client";
 import type { Health, WhoAmI } from "./api/types";
-import VoiceConversation from "./components/VoiceConversation";
 
-const SCREENS = ["talk", "trace", "audit", "privacy", "journeys"] as const;
+// The voice screen moved to the customer-facing demo. The console keeps the
+// operator views only.
+const SCREENS = ["trace", "audit", "privacy", "journeys"] as const;
 type Screen = (typeof SCREENS)[number];
 
 const SCREEN_LABELS: Record<Screen, string> = {
-  talk: "Talk",
   trace: "Trace",
   audit: "Audit",
   privacy: "Privacy",
@@ -17,10 +17,6 @@ const SCREEN_LABELS: Record<Screen, string> = {
 };
 
 const SCREEN_COPY: Record<Screen, { endpoint: string; body: string }> = {
-  talk: {
-    endpoint: "POST /api/assistant/turn and POST /api/voice/speak",
-    body: "A voice conversation with the demo assistant.",
-  },
   trace: {
     endpoint: "GET /api/trace?limit=50",
     body: "Every call Alexa+ made, newest first, with the decision, the latency, and the audit id. Polls only while the tab is visible.",
@@ -47,8 +43,8 @@ type Probe =
 function readScreen(): Screen {
   // Console routes live under #/console/<screen>. A missing screen lands on Talk.
   const raw = window.location.hash.replace(/^#\/?/, "");
-  const value = raw.startsWith("console/") ? raw.slice("console/".length) : raw === "console" ? "talk" : "";
-  return (SCREENS as readonly string[]).includes(value) ? (value as Screen) : "talk";
+  const value = raw.startsWith("console/") ? raw.slice("console/".length) : raw === "console" ? "trace" : "";
+  return (SCREENS as readonly string[]).includes(value) ? (value as Screen) : "trace";
 }
 
 function describe(error: unknown): string {
@@ -131,8 +127,8 @@ export default function App() {
   return (
     <div className="shell">
       <header className="app-header">
-        <a className="brand" href="#/console/talk">
-          Alexa <span>Console</span>
+        <a className="brand" href="#/console/trace">
+          Alexa 3.5 <span>Console</span>
         </a>
         <nav className="nav" aria-label="Console sections">
           {SCREENS.map((item) => (
@@ -179,7 +175,7 @@ export default function App() {
       )}
 
       <main className="main">
-        {screen === "talk" ? <VoiceConversation /> : <section className="card">
+        <section className="card">
           <p className="eyebrow">Scaffold only</p>
           <h1>{SCREEN_LABELS[screen]}</h1>
           <p>{SCREEN_COPY[screen].body}</p>
@@ -190,7 +186,7 @@ export default function App() {
             The theme, the typed client, the shell, and the health probe are in place. The screens are
             the next step in <code className="code">FRONTEND.md</code>.
           </p>
-        </section>}
+        </section>
       </main>
 
       <footer className="footer">

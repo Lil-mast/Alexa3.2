@@ -108,12 +108,12 @@ export default function HousePreview() {
 
           {/* Active devices. The outer rings are the only moving pixels. */}
           <g className="lp-device lp-device-one">
-            <circle cx="66" cy="204" r="18" fill="#e75800" opacity="0.12" />
-            <circle cx="66" cy="204" r="5" fill="#e75800" />
+            <circle cx="66" cy="204" r="18" fill="#d69a0a" opacity="0.12" />
+            <circle cx="66" cy="204" r="5" fill="#d69a0a" />
           </g>
           <g className="lp-device lp-device-two">
-            <circle cx="540" cy="140" r="18" fill="#e75800" opacity="0.12" />
-            <circle cx="540" cy="140" r="5" fill="#e75800" />
+            <circle cx="540" cy="140" r="18" fill="#d69a0a" opacity="0.12" />
+            <circle cx="540" cy="140" r="5" fill="#d69a0a" />
           </g>
           <g className="lp-device lp-device-three">
             <circle cx="330" cy="236" r="18" fill="#465907" opacity="0.14" />

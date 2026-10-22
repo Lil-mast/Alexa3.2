@@ -6,9 +6,10 @@
  * one-time code. The landing page only ever reads it to decide where the
  * primary call to action should point.
  */
+import { API_BASE } from "../api/base";
+
 export const SESSION_TOKEN_KEY = "alexa.session.token";
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
 const SESSION_TIMEOUT_MS = 8_000;
 
 export type SessionCheck = "valid" | "invalid" | "unavailable";
