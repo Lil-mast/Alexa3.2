@@ -42,6 +42,8 @@ export interface AssistantReply {
   suggestions: string[];
   trace_id?: string | null;
   audit_id?: string | null;
+  /** One entry per task in a multi-task turn, in the order the user asked. */
+  steps?: { tool: string | null; status: string; speech: string; audit_id?: string | null }[];
 }
 
 export interface VoiceConfig {

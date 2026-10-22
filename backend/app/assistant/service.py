@@ -23,8 +23,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from app.assistant.models import AssistantReply, ParsedIntentView, PendingView
-from app.assistant.parser import Clarification, Intent, is_affirmative, is_negative, parse
+from app.assistant.models import AssistantReply, ParsedIntentView, PendingView, StepView
+from app.assistant.parser import (
+    INTRO,
+    INTRO_SUGGESTIONS,
+    Clarification,
+    Intent,
+    is_affirmative,
+    is_greeting,
+    is_negative,
+    parse_steps,
+)
 from app.assistant.session import PendingConfirmation, SessionStore
 from app.auth import Principal
 from app.models import ErrorCode, ToolResponse
@@ -32,6 +41,22 @@ from app.router import Router
 from app.rules import RULES
 
 logger = logging.getLogger("alexa.assistant")
+
+
+def _merge(replies: list[AssistantReply]) -> AssistantReply:
+    """One reply for a multi-task turn: the speech in order, the last step's status and pending action."""
+    steps = [
+        StepView(
+            tool=reply.intent.tool if reply.intent else None,
+            status=reply.status,
+            speech=reply.speech,
+            audit_id=reply.audit_id,
+        )
+        for reply in replies
+    ]
+    last = replies[-1]
+    speech = " ".join(reply.speech for reply in replies)
+    return last.model_copy(update={"speech": speech, "steps": steps})
 
 
 @dataclass(frozen=True)
@@ -58,6 +83,8 @@ class AssistantService:
         # The confirmation window is the same reviewed value the token service
         # uses. Two different windows would let the preview expire without the
         # user being told, so there is one source of truth.
+        # Steps the user asked for after the one that is waiting for a yes or no.
+        self._queues: dict[str, list[Intent]] = {}
         self._sessions = SessionStore(
             ttl_seconds=RULES.confirmation.ttl_seconds,
             now=lambda: self._now().timestamp(),
@@ -77,10 +104,13 @@ class AssistantService:
             # Context wins over parsing. A user who was asked "should I go
             # ahead?" is answering that question, not starting a new one.
             if is_affirmative(utterance):
-                return self._confirm(pending, principal, turn)
+                return self._drain(principal, turn, [self._confirm(pending, principal, turn)])
             if is_negative(utterance):
-                return self._cancel(pending, principal, turn)
+                return self._drain(principal, turn, [self._cancel(pending, principal, turn)])
             return self._repeat(pending, principal, turn)
+
+        # Steps left over from a confirmation that expired must not run now.
+        self._queues.pop(subject, None)
 
         if is_affirmative(utterance):
             return self._clarify(
@@ -98,40 +128,24 @@ class AssistantService:
                 turn,
                 principal,
             )
+        if is_greeting(utterance):
+            return self._clarify(INTRO, INTRO_SUGGESTIONS, "greeting", turn, principal)
 
-        parsed = parse(utterance, today=self._now().date())
-        if isinstance(parsed, Clarification):
+        steps = parse_steps(utterance, today=self._now().date())
+        if isinstance(steps, Clarification):
             return self._clarify(
-                parsed.speech,
-                parsed.suggestions,
-                parsed.reason,
+                steps.speech,
+                steps.suggestions,
+                steps.reason,
                 turn,
                 principal,
             )
 
-        response = self._router.execute(parsed.tool, parsed.params, principal)
-        pending_view = None
-        if response.status == "confirmation_required" and response.confirmation_token and response.preview is not None:
-            # The router already wrote a `previewed` audit row and issued the
-            # token. Keeping the token here is what lets the next "yes" finish
-            # the same action without the browser managing a capability.
-            issued_at = self._now().timestamp()
-            self._sessions.put(
-                PendingConfirmation(
-                    subject=subject,
-                    tool=parsed.tool,
-                    params=dict(parsed.params),
-                    token=response.confirmation_token,
-                    preview=response.preview,
-                    effect=response.preview.effect,
-                    created_at=issued_at,
-                    expires_at=issued_at + self._sessions.ttl_seconds,
-                    ttl_seconds=self._sessions.ttl_seconds,
-                )
-            )
-            pending_view = self._sessions.get(subject)
-            pending_view = pending_view.view() if pending_view else None
-        return self._reply(parsed, response, principal, turn, pending_view)
+        # Run the first step now and keep the rest in order. A step that needs a
+        # yes or no stops the queue until the user answers it.
+        self._queues[subject] = list(steps[1:])
+        first = self._execute(steps[0], principal, turn)
+        return self._drain(principal, turn, [first])
 
     def confirm(self, principal: Principal) -> AssistantReply:
         """Complete the pending action, for a UI button that is not a sentence."""
@@ -145,7 +159,7 @@ class AssistantService:
                 turn,
                 principal,
             )
-        return self._confirm(pending, principal, turn)
+        return self._drain(principal, turn, [self._confirm(pending, principal, turn)])
 
     def cancel(self, principal: Principal) -> AssistantReply:
         """Drop the pending action, for a UI button that is not a sentence."""
@@ -159,7 +173,7 @@ class AssistantService:
                 turn,
                 principal,
             )
-        return self._cancel(pending, principal, turn)
+        return self._drain(principal, turn, [self._cancel(pending, principal, turn)])
 
     def session(self, subject: str) -> PendingView | None:
         """The pending confirmation for the console, without the token."""
@@ -167,12 +181,49 @@ class AssistantService:
         return pending.view() if pending is not None else None
 
     def reset(self, subject: str) -> bool:
-        """Forget a pending action. A session control, not an audited action."""
+        """Forget a pending action and the steps queued behind it. A session control, not an audited action."""
+        self._queues.pop(subject, None)
         return self._sessions.clear(subject)
 
     # ------------------------------------------------------------------
     # Confirmation paths
     # ------------------------------------------------------------------
+
+    def _drain(self, principal: Principal, turn: _Turn, replies: list[AssistantReply]) -> AssistantReply:
+        """Run queued steps until one needs a yes or no, or the queue is empty."""
+        subject = principal.subject
+        queue = self._queues.get(subject, [])
+        while queue and self._sessions.get(subject) is None:
+            replies.append(self._execute(queue.pop(0), principal, turn))
+        if not queue:
+            self._queues.pop(subject, None)
+        return _merge(replies)
+
+    def _execute(self, intent: Intent, principal: Principal, turn: _Turn) -> AssistantReply:
+        """One tool call through the router, keeping its preview for the next yes or no."""
+        response = self._router.execute(intent.tool, intent.params, principal)
+        pending_view = None
+        if response.status == "confirmation_required" and response.confirmation_token and response.preview is not None:
+            # The router already wrote a `previewed` audit row and issued the
+            # token. Keeping the token here is what lets the next "yes" finish
+            # the same action without the browser managing a capability.
+            issued_at = self._now().timestamp()
+            self._sessions.put(
+                PendingConfirmation(
+                    subject=principal.subject,
+                    tool=intent.tool,
+                    params=dict(intent.params),
+                    token=response.confirmation_token,
+                    preview=response.preview,
+                    effect=response.preview.effect,
+                    created_at=issued_at,
+                    expires_at=issued_at + self._sessions.ttl_seconds,
+                    ttl_seconds=self._sessions.ttl_seconds,
+                )
+            )
+            pending_view = self._sessions.get(principal.subject)
+            pending_view = pending_view.view() if pending_view else None
+        return self._reply(intent, response, principal, turn, pending_view)
 
     def _confirm(self, pending: PendingConfirmation, principal: Principal, turn: _Turn) -> AssistantReply:
         # The router re-verifies subject, tool, and parameter hash, so this is a
@@ -201,10 +252,16 @@ class AssistantService:
 
     def _cancel(self, pending: PendingConfirmation, principal: Principal, turn: _Turn) -> AssistantReply:
         self._sessions.clear(principal.subject)
+        # A no stops the whole request. Running the steps behind a declined one
+        # would act on a plan the user just refused.
+        skipped = self._queues.pop(principal.subject, [])
+        speech = "Okay, I will not do that."
+        if skipped:
+            speech += " I also skipped the rest of your request."
         reply = AssistantReply(
             understood=True,
             status="cancelled",
-            speech="Okay, I will not do that.",
+            speech=speech,
             detail="Nothing changed.",
             intent=ParsedIntentView(
                 tool=pending.tool,

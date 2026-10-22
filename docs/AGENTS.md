@@ -171,7 +171,7 @@ four YAML journeys with an isolated runner. Google sign-in is in the backend:
 persistent users and sessions, OAuth state and PKCE, single-use exchange codes,
 a session verifier that resolves to the same `Principal` as a static token,
 explicit CORS for Vercel, and SQLite locally or Render Postgres in production.
-The suite is 208 tests and includes parser, confirmation, privacy-gate, voice,
+The suite is 214 tests and includes parser, confirmation, privacy-gate, voice,
 journey, auth, CORS, and account persistence coverage.
 
 The React app is at the repository root with pnpm, React 19, TypeScript, Vite,

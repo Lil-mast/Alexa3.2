@@ -19,7 +19,9 @@ const SUGGESTIONS = [
   "Undo that",
 ];
 
-const GREETING = "Hi, I'm Alexa. Say what you need, or pick a suggestion below.";
+// Kept in step with INTRO in backend/app/assistant/parser.py.
+const GREETING =
+  "Hey, this is Alexa 3.5. I can set timers, change the lights or the thermostat, book a meeting room, undo my last action, or change your privacy settings. You can give me several tasks in one sentence. What would you like me to do today?";
 
 interface Turn {
   id: number;

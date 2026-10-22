@@ -519,6 +519,27 @@ def _clarify(message: str, *suggestions: str, reason: str = "unrecognised") -> C
     return Clarification(speech=message, suggestions=suggestions, reason=reason)
 
 
+INTRO = (
+    "Hey, this is Alexa 3.5. I can set timers, change the lights or the thermostat, book a meeting "
+    "room, undo my last action, or change your privacy settings. You can give me several tasks in one "
+    "sentence. What would you like me to do today?"
+)
+INTRO_SUGGESTIONS = (
+    "set a ten minute timer and dim the living room lights to 30 percent",
+    "book the cedar room tomorrow at 1pm for 4 guests",
+)
+
+_GREETING_RE = re.compile(r"(hi|hello|hey|good (morning|afternoon|evening))( there)?( alexa)?")
+_STEP_SPLIT_RE = re.compile(r"\s*(?:[,;]|\band then\b|\bthen\b|\balso\b|\band\b)\s*")
+MAX_STEPS = 5
+
+
+def is_greeting(utterance: str) -> bool:
+    """A greeting with nothing else in it, such as "hey" or "good morning Alexa"."""
+    text = re.sub(r"[^a-z ]", "", normalise(utterance)).strip()
+    return _GREETING_RE.fullmatch(text) is not None
+
+
 def _privacy_get(text: str) -> Intent | None:
     """A privacy question reads state; a privacy instruction changes it."""
     question = re.match(r"^(what|how|is|are|am|do|does|show|tell)\b", text)
@@ -776,13 +797,7 @@ def parse(utterance: str, *, today: date | None = None) -> ParseResult:
         )
 
     if re.search(r"\bhelp\b|\bwhat can you do\b|\bcommands\b", text):
-        return _clarify(
-            "I can set timers, change lights or the thermostat, book a room, undo, explain the last "
-            "action, or change privacy settings.",
-            "set a ten minute timer",
-            "book a room tomorrow at 2 PM",
-            reason="help",
-        )
+        return _clarify(INTRO, *INTRO_SUGGESTIONS, reason="help")
 
     privacy_get = _privacy_get(text)
     if privacy_get is not None:
@@ -839,3 +854,28 @@ __all__ = [
     "parse_duration_seconds",
     "words_to_digits",
 ]
+
+
+def parse_steps(utterance: str, *, today: date | None = None) -> list[Intent] | Clarification:
+    """Map one utterance to one or more tool calls, in the order the user said them.
+
+    A sentence that mixes tool families is split at its connectors, and the split is
+    kept only when every piece parses on its own. Otherwise the original
+    clarification stands, so a bad split can never invent an action.
+    """
+    first = parse(utterance, today=today)
+    if not isinstance(first, Clarification):
+        return [first]
+    if first.reason != "multiple_intents":
+        return first
+
+    pieces = [piece for piece in _STEP_SPLIT_RE.split(normalise(utterance)) if piece]
+    if not 2 <= len(pieces) <= MAX_STEPS:
+        return first
+    steps: list[Intent] = []
+    for piece in pieces:
+        parsed = parse(piece, today=today)
+        if not isinstance(parsed, Intent):
+            return first
+        steps.append(parsed)
+    return steps

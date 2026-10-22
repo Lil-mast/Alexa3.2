@@ -218,3 +218,76 @@ def test_confirm_and_cancel_methods_share_the_same_flow() -> None:
     assert cancelled.status == "cancelled"
     assert assistant.session(principal.subject) is None
     assert len(state.bookings.list_for(principal.subject)) == 1
+
+
+def test_parse_steps_splits_two_families_into_ordered_intents() -> None:
+    from app.assistant.parser import parse_steps
+
+    steps = parse_steps("set a ten minute timer and dim the living room lights to 30 percent", today=TODAY)
+
+    assert isinstance(steps, list)
+    assert [step.tool for step in steps] == ["timer_set", "lights_set"]
+
+
+def test_parse_steps_keeps_the_clarification_when_a_piece_does_not_parse() -> None:
+    from app.assistant.parser import parse_steps
+
+    result = parse_steps("set a timer, turn on the lights and make me a sandwich", today=TODAY)
+
+    assert isinstance(result, Clarification)
+    assert result.reason == "multiple_intents"
+
+
+def test_greeting_introduces_the_assistant_and_runs_nothing() -> None:
+    from app.assistant.parser import INTRO
+
+    state, assistant = _assistant()
+
+    reply = assistant.turn("hey alexa", _principal())
+
+    assert reply.status == "clarification"
+    assert reply.speech == INTRO
+    assert "Alexa 3.5" in reply.speech
+    assert state.timers.list_for("test-user") == []
+
+
+def test_several_low_risk_tasks_in_one_sentence_all_run() -> None:
+    state, assistant = _assistant()
+
+    reply = assistant.turn("set a ten minute timer and dim the living room lights to 30 percent", _principal())
+
+    assert reply.status == "ok"
+    assert [step.tool for step in reply.steps] == ["timer_set", "lights_set"]
+    assert len(state.timers.list_for("test-user")) == 1
+    assert state.lights.get("test-user", "living_room").brightness == 30
+
+
+def test_a_step_that_needs_a_yes_waits_and_the_rest_runs_after_it() -> None:
+    state, assistant = _assistant()
+    principal = _principal()
+
+    waiting = assistant.turn("set a ten minute timer and book the cedar room tomorrow at 1pm for 4 guests", principal)
+
+    assert waiting.status == "confirmation_required"
+    assert len(state.timers.list_for("test-user")) == 1
+    assert state.bookings.list_for("test-user") == []
+
+    done = assistant.turn("yes", principal)
+
+    assert done.status == "ok"
+    assert [step.tool for step in done.steps] == ["book_room"]
+    assert len(state.bookings.list_for("test-user")) == 1
+
+
+def test_no_to_a_step_skips_the_rest_of_the_request() -> None:
+    state, assistant = _assistant()
+    principal = _principal()
+    assistant.turn("book the cedar room tomorrow at 1pm for 4 guests and set a ten minute timer", principal)
+
+    reply = assistant.turn("no", principal)
+
+    assert reply.status == "cancelled"
+    assert "skipped the rest" in reply.speech
+    assert state.bookings.list_for("test-user") == []
+    assert state.timers.list_for("test-user") == []
+    assert assistant.session("test-user") is None

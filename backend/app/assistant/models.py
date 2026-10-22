@@ -43,6 +43,15 @@ class PendingView(BaseModel):
     ttl_seconds: int
 
 
+class StepView(BaseModel):
+    """One tool call inside a multi-task turn, in the order the user asked for it."""
+
+    tool: str | None
+    status: str
+    speech: str
+    audit_id: str | None = None
+
+
 class AssistantReply(BaseModel):
     """One assistant turn, whether it executed, previewed, refused, or asked.
 
@@ -60,8 +69,9 @@ class AssistantReply(BaseModel):
     response: ToolResponse | None = None
     pending: PendingView | None = None
     suggestions: list[str] = Field(default_factory=list)
+    steps: list[StepView] = Field(default_factory=list)
     trace_id: str | None = None
     audit_id: str | None = None
 
 
-__all__ = ["AssistantReply", "ParsedIntentView", "PendingView"]
+__all__ = ["AssistantReply", "ParsedIntentView", "PendingView", "StepView"]
