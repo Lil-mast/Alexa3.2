@@ -13,17 +13,26 @@ Alexa separates those two concerns. The LLM handles ambiguity in language. Deter
 ## What it does
 
 > The build is in progress. The status section below says what runs today. The
-> hash-chained audit, undo tools, concise mode, and privacy toggles are Day 3
-> work; the console, voice proxy, and journeys are Day 4. The paragraphs in this
-> section describe the target product, not the current binary.
+> deterministic demo assistant, the ElevenLabs voice proxy, the console REST API,
+> and four YAML journeys are in the backend. The four console screens and the live
+> deployment are next. The paragraphs in this section describe the target
+> product, not the current binary.
 
 **Deterministic actions.** Timers, alarms, lighting, thermostats, and media controls run through a rules engine. The model picks a tool and parameters. The engine validates them against explicit bounds (for example, thermostat setpoints between 16 and 28 °C) and applies the change. The same input always produces the same result.
 
 **Confirmations before consequential actions.** Every tool declares a risk tier. Low-risk actions run immediately. Medium and high-risk actions return a structured preview naming the service, the tool, the exact parameters, and the expected effect. The server issues a single-use confirmation token that expires after five minutes. Nothing executes until a second call presents that token.
 
-**Concise mode.** Responses default to terse, one-sentence answers. A `detail` flag in the tool response carries the longer explanation, and Alexa+ can offer it as a follow-up ("want the details?").
+**Concise mode.** Responses default to terse, one-sentence answers. A
+`detail_available` flag says a longer explanation exists, and Alexa+ offers it as
+a follow-up ("want the details?"). A `tell_me_more` tool returns the withheld
+text. Turning concise mode off puts `detail` back in every response.
 
-**Rollback and audit.** Every tool call is written to an append-only log with a hash chain, so tampering is detectable. Each entry records the tool name, the caller's scope, the parameters, the result, and the compensating action if one exists. Reversible actions (lights, thermostat, timers) expose an undo tool. Irreversible actions (deletions, payments) are marked as such before confirmation.
+**Rollback and audit.** Every tool call is written to an append-only log with a
+hash chain, so tampering is detectable. Each entry records the tool name, the
+caller's scope, the rules version, the parameter hash, the result, and the
+compensating action if one exists. Reversible actions (lights, thermostat,
+timers, bookings) expose `undo`. Irreversible actions (deletions, payments) are
+marked as such before confirmation.
 
 **Visible tool use.** Each response includes a trace of the tools called, which service each one touched, and whether it succeeded. The Alexa console shows the same trace so developers and reviewers can see exactly what happened.
 
@@ -40,7 +49,7 @@ uv sync --dev
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-The frontend console lands on Day 4. A plain virtualenv works too:
+A plain virtualenv works too:
 
 ```bash
 cd backend
@@ -48,6 +57,19 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+The console is a separate package at the repository root. It runs against the
+same backend:
+
+```bash
+cd frontend
+pnpm install
+pnpm dev            # http://localhost:5173/console/
+```
+
+It proxies `/api` and `/health` to port 8000, so the browser keeps one origin.
+Paste the development token into the token bar, or copy
+`frontend/.env.example` to `frontend/.env.local` for the session.
 
 The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the
 Alexa+ Local Inspector or the MCP Inspector before connecting it to Alexa+. The
@@ -65,7 +87,9 @@ cd backend
 uv run python -m app.cli tools
 uv run python -m app.cli call timer_set '{"duration_seconds": 600, "label": "pasta"}'
 uv run python -m app.cli call book_room '{"date": "2026-10-23", "guests": 4}'
+uv run python -m app.cli call undo '{}'
 uv run python -m app.cli bench --n 100
+uv run python -m app.cli audit verify
 ```
 
 Set `ALEXA_MCP_URL` and `ALEXA_TOKEN` to point at a deployed instance. A tool
@@ -103,7 +127,7 @@ and a bearer token.
 3. In the Alexa+ developer console, register the MCP server URL
    `https://<service>/mcp` with `Authorization: Bearer <token>`.
 4. Verify with `uv run python -m app.cli --url https://<service>/mcp tools` that all
-   four tools and their output schemas are visible.
+   eight tools and their output schemas are visible.
 5. Ask for a low-risk action, then a booking preview and confirmation.
 
 Current limitation: the server publishes RFC 9728 protected-resource metadata
@@ -123,14 +147,17 @@ failure modes we have already hit.
 - **Subjects are pseudonymous.** The token table takes a stable household or
   user pseudonym. A raw `amzn1.` id fails at startup, so it cannot spread into
   device state, traces, and the future audit chain.
-- **Raw parameters stay out of the trace.** The console sees a parameter hash,
-  the tool, the decision, and the speech. The full record belongs in the
-  access-controlled audit table on Day 3.
-- **State is in memory.** A restart clears timers, lights, bookings, pending
-  confirmations, and the trace. A pending confirmation becomes invalid and the
-  user is asked again. That is safe, not durable.
-- **Booking is external.** `book_room` is marked `external=true` so the Day 3
-  privacy gate can refuse it when third-party sharing is off.
+- **Raw parameters stay out of the trace and the audit row.** The console sees a
+  parameter hash, the tool, the decision, and the speech. The audit row adds the
+  minimal previous device state that undo needs, and nothing the user typed.
+- **State is in memory.** A restart clears timers, lights, bookings, privacy
+  settings, pending confirmations, the trace, and the audit chain. A pending
+  confirmation becomes invalid and the user is asked again. That is safe, not
+  durable. The seeded audit fixture makes the reset visible rather than silent.
+- **Retention is real.** Changing `retention_days` immediately replaces older
+  rows for that user with tombstones that keep the chain link.
+- **Booking is external.** `book_room` is marked `external=true`, so the privacy
+  gate refuses it, and cancelling one, when third-party sharing is off.
 - **Tool descriptions are trusted prompt text.** They are sent to Alexa+ to help
   it choose a tool. Review a change to a description as carefully as a change to
   a handler, and only expose tools whose behavior you control.
@@ -156,15 +183,22 @@ python3 scripts/check_leaks.py --all
 The test suite starts a real uvicorn server for the MCP round trip. It covers
 auth, the 401 challenge, metadata, rules, defaults, confirmation tokens, replay,
 expiry, cross-user use, booking conflicts, per-user isolation, the `NO_CHANGE`
-path, tool annotations, the CLI, and a latency guard on the in-memory hot path.
+path, tool annotations, the CLI, the audit chain including tampering and
+retention tombstones, undo for every reversible tool, concise mode, privacy
+isolation, and a latency guard on the in-memory hot path.
 CI runs the same checks, verifies that `requirements.txt` matches `uv.lock`, and
 builds the Docker image with a live `/health` check.
 
 ## Status
 
-Hackathon build. Day 2 is complete: four tools, versioned YAML rules,
-single-use confirmation tokens, simulated adapters, a trace buffer, and 76
-tests. See [BUILD_LOG.md](BUILD_LOG.md) for what is implemented and verified,
-[DECISIONS.md](DECISIONS.md) for the choices and their revisit conditions, and
-`TECHNICAL.md` for architecture and contracts. `AGENTS.md` is the short working
-guide for a new contributor or coding agent.
+Hackathon build. Day 3 is complete: eight tools, versioned YAML rules,
+single-use confirmation tokens, a hash-chained audit log with a seeded startup
+fixture, `audit verify`, undo linked through the log, concise mode with
+`tell_me_more`, server-enforced privacy toggles, simulated adapters, a trace
+buffer, and 132 tests. The Day 4 console scaffold is installed and builds: pnpm,
+React 19, TypeScript, Vite, the Amazon palette as tokens, a typed API client, and
+a health probe. The four screens are next. See [BUILD_LOG.md](BUILD_LOG.md) for
+what is implemented and verified, [DECISIONS.md](DECISIONS.md) for the choices
+and their revisit conditions, [FRONTEND.md](FRONTEND.md) for the console design,
+and `TECHNICAL.md` for architecture and contracts. `AGENTS.md` is the short
+working guide for a new contributor or coding agent.

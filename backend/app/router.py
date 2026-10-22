@@ -1,5 +1,5 @@
-"""One execution path for MCP calls and tests: auth, rules, confirmation, adapter,
-response, trace.
+"""One execution path for MCP calls and tests: auth, rules, privacy,
+confirmation, adapter, audit, response, trace.
 """
 
 from __future__ import annotations
@@ -11,7 +11,8 @@ from typing import Literal
 from app.auth import Principal
 from app.canonical import params_hash
 from app.confirm import TokenStatus
-from app.models import ErrorCode, Preview, RuleViolation, ToolError, ToolResponse
+from app.memory import Remembered
+from app.models import ErrorCode, HandlerResult, Preview, RuleViolation, ToolError, ToolResponse
 from app.rules import RULES, validate_params
 from app.state import AppState
 from app.tools import HANDLERS, REGISTRY
@@ -23,11 +24,12 @@ logger = logging.getLogger("alexa.calls")
 class Router:
     """The only path from a tool call to an adapter.
 
-    Order matters: identity, then scope, then parameters, then confirmation, then
-    execution, then trace. Auth comes before validation so an unauthenticated
-    caller cannot use error messages to learn the schema. Confirmation comes
-    after validation so a preview always describes a request that passed the
-    rules.
+    Order matters: identity, then scope, then parameters, then privacy, then
+    confirmation, then execution, then audit and trace. Auth comes before
+    validation so an unauthenticated caller cannot use error messages to learn the
+    schema. Privacy comes before confirmation so a blocked external action never
+    shows a preview the server would refuse to run. Confirmation comes after
+    validation so a preview always describes a request that passed the rules.
     """
 
     def __init__(self, state: AppState) -> None:
@@ -88,6 +90,27 @@ class Router:
             # untouched and the refusal is still visible in the trace.
             return self._refuse(spec, principal, params, violation.error, started)
 
+        # Privacy comes after validation and before risk, per BUILD_PLAN.md
+        # section 2. An external tool is refused before a preview is issued, so
+        # a user with sharing off never sees a confirmation for an action the
+        # server will not perform.
+        if spec.external and not self._state.privacy.get(principal.subject).third_party_sharing:
+            logger.warning(
+                "privacy_blocked",
+                extra={"tool": spec.name, "subject": principal.subject},
+            )
+            return self._refuse(
+                spec,
+                principal,
+                clean,
+                ToolError.of(
+                    ErrorCode.PRIVACY_BLOCKED,
+                    "That action needs third-party sharing, which is off.",
+                    follow_up="Explain that third-party sharing is off and offer to turn it on.",
+                ),
+                started,
+            )
+
         # Medium and high risk actions split into two calls: preview, then
         # execute with the token issued by that preview. Nothing below the token
         # check runs on the first call.
@@ -137,7 +160,7 @@ class Router:
             self._state.confirmations.consume(confirmation_token or "")
 
         response = ToolResponse(status="ok", speech=result.speech, detail=result.detail)
-        return self._finish(spec, principal, clean, response, started, decision=result.decision)
+        return self._finish(spec, principal, clean, response, started, decision=result.decision, result=result)
 
     def _preview(
         self,
@@ -226,15 +249,58 @@ class Router:
         started: float,
         *,
         decision: Literal["executed", "previewed", "refused", "no_change"],
+        result: HandlerResult | None = None,
     ) -> ToolResponse:
         elapsed_ms = max(0, int((time.perf_counter() - started) * 1000))
+        subject = principal.subject if principal else "anonymous"
+        params_hash_value = params_hash(params)
+
+        # Every decision, including a refusal and a preview, gets one audit row.
+        # The row keeps the parameter hash and the minimal compensation state,
+        # never the raw request. `compensator_of` links an undo to what it
+        # reversed, so the record is a chain of actions, not just a log.
+        row = self._state.audit.append(
+            subject=subject,
+            tool=spec.name,
+            tool_version=spec.version,
+            rules_version=RULES.version,
+            service=spec.service,
+            scopes_used=(result.scopes_used if result and result.scopes_used is not None else list(spec.scopes)),
+            params_hash=params_hash_value,
+            decision=decision,
+            status=response.status,
+            error_code=response.error.code.value if response.error else None,
+            compensator_of=result.compensator_of if result else None,
+            result_ref=result.result_ref if result else None,
+            compensation=result.compensation if result else None,
+        )
+        response.audit_id = row.id
+
+        # Concise mode is a server decision: the response carries the short
+        # sentence and a flag that a longer detail exists. `tell_me_more` reads
+        # the same text from memory, so Alexa+ can offer it without the server
+        # repeating the work or the client inventing an answer.
+        #
+        # Only a handler result can be withheld. A preview's detail explains that
+        # nothing has happened yet, and it is part of the confirmation contract
+        # rather than an extra, so it is never replaced by a flag that points at
+        # memory holding nothing.
+        detail = result.detail if result else None
+        if detail:
+            if self._state.privacy.get(subject).personalization:
+                self._state.details.remember(subject, Remembered(audit_id=row.id, tool=spec.name, detail=detail))
+            if self._state.privacy.concise(subject):
+                response.detail = None
+                response.detail_available = True
+
         # The trace stores the parameter hash, not the parameters. Raw values stay
-        # in the request and, on Day 3, in the access-controlled audit row.
+        # in the request and in the access-controlled audit row's compensation,
+        # which is device state rather than user speech.
         event = self._state.trace.record(
-            subject=principal.subject if principal else "anonymous",
+            subject=subject,
             tool=spec.name,
             service=spec.service,
-            params_hash=params_hash(params),
+            params_hash=params_hash_value,
             status=response.status,
             decision=decision,
             ms=elapsed_ms,
@@ -258,6 +324,7 @@ class Router:
                 "params_hash": event.params_hash,
                 "error_code": response.error.code if response.error else None,
                 "trace_id": event.id,
+                "audit_id": row.id,
             },
         )
         return response

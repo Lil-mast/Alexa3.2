@@ -42,3 +42,6 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
 # Depends in defaults is the form that survives `from __future__ import annotations`
 # for dependencies built per app instance inside create_app().
 "app/main.py" = ["B008"]
+# The API routers build their dependencies the same way, from a router factory
+# that receives the verifier for this app instance.
+"app/api/*.py" = ["B008"]

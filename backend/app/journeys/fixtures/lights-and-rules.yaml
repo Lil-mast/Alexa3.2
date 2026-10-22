@@ -1,0 +1,34 @@
+# A valid action, a rule refusal, and an undo.
+#
+# The thermostat at 35 is the demo's clearest rules moment. The refusal is still
+# an audit row, so the journey checks `refused`, not just the error code. Undo
+# then targets the last executed action, which is the light change, because the
+# refused setpoint never reached an adapter.
+name: lights-and-rules
+title: Lights and a refused thermostat
+description: Dim the lights, watch the rules refuse 35 degrees, then undo the light change.
+
+steps:
+  - say: dim the living room lights to 30 percent
+    expect:
+      tool: lights_set
+      status: ok
+      speech: "Living room lights set to 30 percent."
+      audit_decision: executed
+      pending: false
+
+  - say: set the thermostat to 35
+    expect:
+      tool: thermostat_set
+      status: error
+      error_code: OUT_OF_BOUNDS
+      audit_decision: refused
+      pending: false
+
+  - say: undo that
+    expect:
+      tool: undo
+      status: ok
+      speech: "Living room lights off again."
+      audit_decision: executed
+      pending: false

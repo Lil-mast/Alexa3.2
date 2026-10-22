@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     # instant, so nothing reads this yet.
     adapter_timeout_ms: int = 300
 
+    # ElevenLabs is the demo voice. It is optional: without a key the console
+    # falls back to the browser's own speech synthesis. The key is read from the
+    # environment and never leaves the server, and the voice id is fixed here so
+    # a client cannot ask the server to fetch an arbitrary voice.
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    elevenlabs_model_id: str = "eleven_turbo_v2_5"
+    elevenlabs_timeout_seconds: float = 10.0
+    # A tool response is one short sentence. The cap protects the upstream call
+    # from an accidental paste of a whole transcript.
+    voice_max_chars: int = 600
+    # Server-composed phrases repeat during a demo. A small cache makes the
+    # second playback instant and cuts upstream cost. It is keyed by exact text,
+    # cleared on restart, and never contains a subject id.
+    voice_cache_size: int = 32
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _upper_log_level(cls, value: object) -> object:
@@ -88,6 +104,11 @@ class Settings(BaseSettings):
     @property
     def allowed_host_list(self) -> list[str]:
         return [host.strip() for host in self.allowed_hosts.split(",") if host.strip()]
+
+    @property
+    def voice_enabled(self) -> bool:
+        """True only when both halves of the ElevenLabs configuration exist."""
+        return bool(self.elevenlabs_api_key and self.elevenlabs_voice_id)
 
 
 def startup_warnings(settings: Settings) -> list[str]:

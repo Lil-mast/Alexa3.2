@@ -68,3 +68,15 @@ class LightAdapter:
         state.updated_at = self._now()
         self._lights[subject][room] = state
         return previous, state
+
+    def restore(self, subject: str, room: str, *, on: bool, brightness: int) -> LightState:
+        """Write a snapshot back verbatim, for undo.
+
+        `set()` cannot express this: turning a room off keeps whatever brightness
+        was last remembered, which is not necessarily the value before the action
+        being undone. Undo restores the snapshot, including the remembered
+        brightness of a room that was off.
+        """
+        state = LightState(room=room, on=on, brightness=brightness, updated_at=self._now())
+        self._lights[subject][room] = state
+        return state

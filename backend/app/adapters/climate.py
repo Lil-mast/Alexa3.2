@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel
 
+from app.adapters.rooms import ROOMS
+
 DEFAULT_TARGET_C = 21
 
 
@@ -31,6 +33,10 @@ class ClimateAdapter:
         if existing is not None:
             return existing
         return ClimateState(zone=zone, target_c=DEFAULT_TARGET_C, updated_at=self._now())
+
+    def all_for(self, subject: str) -> list[ClimateState]:
+        """Read every zone for the console snapshot, in the canonical room order."""
+        return [self.get(subject, zone) for zone in ROOMS]
 
     def set(self, subject: str, zone: str, target_c: int) -> tuple[ClimateState, ClimateState, bool]:
         previous = self.get(subject, zone)

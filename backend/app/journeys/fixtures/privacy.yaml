@@ -1,0 +1,32 @@
+# The privacy gate, end to end.
+#
+# Turning third-party sharing off must refuse `book_room`, which is the only
+# tool marked external, before a preview is issued. The refusal is audited. The
+# last step restores the default so a journey run leaves its isolated state as
+# it found it, even though that state is discarded.
+name: privacy
+title: Privacy gate
+description: Turn third-party sharing off, watch the booking refused, then turn it back on.
+
+steps:
+  - say: turn off third party sharing
+    expect:
+      tool: privacy_set
+      status: ok
+      audit_decision: executed
+      pending: false
+
+  - say: book a room tomorrow
+    expect:
+      tool: book_room
+      status: error
+      error_code: PRIVACY_BLOCKED
+      audit_decision: refused
+      pending: false
+
+  - say: turn on third party sharing
+    expect:
+      tool: privacy_set
+      status: ok
+      audit_decision: executed
+      pending: false

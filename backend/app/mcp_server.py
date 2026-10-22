@@ -15,7 +15,7 @@ from app.auth import Principal, StaticTokenVerifier, principal_from_access_token
 from app.config import Settings
 from app.models import ToolResponse
 from app.router import Router
-from app.tools import booking, lights, thermostat, timers
+from app.tools import booking, details, lights, privacy, thermostat, timers, undo
 from app.tools.specs import ToolSpec
 
 # Sent to the model once during initialize. It tells Alexa+ how to read the
@@ -42,7 +42,7 @@ def annotations_for(spec: ToolSpec) -> ToolAnnotations:
     """
     return ToolAnnotations(
         title=spec.title,
-        read_only_hint=False,
+        read_only_hint=spec.read_only,
         destructive_hint=False,
         idempotent_hint=spec.idempotent,
         open_world_hint=spec.external,
@@ -182,6 +182,69 @@ def build_mcp_server(settings: Settings, router: Router, verifier: StaticTokenVe
             },
             principal,
             confirmation_token=confirmation_token,
+        )
+
+    @mcp.tool(
+        name=undo.SPEC.name,
+        title=undo.SPEC.title,
+        description=undo.SPEC.description,
+        annotations=annotations_for(undo.SPEC),
+    )
+    async def undo_last(
+        ctx: Context,
+        audit_id: str | None = None,
+    ) -> ToolResponse:
+        principal = await principal_from_context(ctx, verifier)
+        return router.execute(undo.SPEC.name, {"audit_id": audit_id}, principal)
+
+    @mcp.tool(
+        name=details.SPEC.name,
+        title=details.SPEC.title,
+        description=details.SPEC.description,
+        annotations=annotations_for(details.SPEC),
+    )
+    async def tell_me_more(
+        ctx: Context,
+        audit_id: str | None = None,
+    ) -> ToolResponse:
+        principal = await principal_from_context(ctx, verifier)
+        return router.execute(details.SPEC.name, {"audit_id": audit_id}, principal)
+
+    @mcp.tool(
+        name=privacy.GET_SPEC.name,
+        title=privacy.GET_SPEC.title,
+        description=privacy.GET_SPEC.description,
+        annotations=annotations_for(privacy.GET_SPEC),
+    )
+    async def privacy_get(ctx: Context) -> ToolResponse:
+        principal = await principal_from_context(ctx, verifier)
+        return router.execute(privacy.GET_SPEC.name, {}, principal)
+
+    @mcp.tool(
+        name=privacy.SET_SPEC.name,
+        title=privacy.SET_SPEC.title,
+        description=privacy.SET_SPEC.description,
+        annotations=annotations_for(privacy.SET_SPEC),
+    )
+    async def privacy_set(
+        ctx: Context,
+        retention_days: int | None = None,
+        personalization: bool | None = None,
+        microphone_mode: str | None = None,
+        third_party_sharing: bool | None = None,
+        concise_mode: bool | None = None,
+    ) -> ToolResponse:
+        principal = await principal_from_context(ctx, verifier)
+        return router.execute(
+            privacy.SET_SPEC.name,
+            {
+                "retention_days": retention_days,
+                "personalization": personalization,
+                "microphone_mode": microphone_mode,
+                "third_party_sharing": third_party_sharing,
+                "concise_mode": concise_mode,
+            },
+            principal,
         )
 
     return mcp

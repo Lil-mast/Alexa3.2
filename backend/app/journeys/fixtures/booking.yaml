@@ -1,0 +1,31 @@
+# The full medium-risk flow: preview, confirm, undo.
+#
+# "tomorrow at 1pm" is resolved by the parser, so the fixture does not go stale
+# as the date changes. The preview step checks `pending: true`, which proves the
+# assistant is holding a token for the next turn. The confirm step checks that
+# the row is `executed`, and the final undo cancels the booking it created.
+name: booking
+title: Booking preview, confirm, undo
+description: Book a room, answer the confirmation, then undo the booking.
+
+steps:
+  - say: book the cedar room tomorrow at 1pm for 4 guests
+    expect:
+      tool: book_room
+      status: confirmation_required
+      audit_decision: previewed
+      pending: true
+
+  - say: "yes"
+    expect:
+      tool: book_room
+      status: ok
+      audit_decision: executed
+      pending: false
+
+  - say: undo that
+    expect:
+      tool: undo
+      status: ok
+      audit_decision: executed
+      pending: false

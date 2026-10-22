@@ -32,17 +32,21 @@ class ToolSpec(BaseModel):
     scopes: list[str]
     risk: Literal["low", "medium", "high"]
     reversible: bool
+    # True when the tool only reads state. MCP clients use this hint to decide
+    # whether a call needs the same caution as a write.
+    read_only: bool = False
     # True when repeating the same call with the same parameters leaves the
     # same state. MCP clients use this hint when deciding whether a retry is
     # safe after a timeout.
     idempotent: bool = False
-    # Tool that undoes this one. Day 3 resolves it through the audit log.
+    # Tool that undoes this one. The audit row's `compensation` payload is what
+    # the compensator actually receives.
     compensator: str | None = None
     required: list[str] = Field(default_factory=list)
     optional: list[str] = Field(default_factory=list)
     confirmation_template: str | None = None
-    # Privacy gate for Day 3: external tools are refused when the user turns off
-    # third-party sharing.
+    # Privacy gate: external tools are refused when the user turns off
+    # third_party_sharing.
     external: bool = False
     # High-risk tools stay disabled unless a current certification report exists.
     certified: bool | None = None

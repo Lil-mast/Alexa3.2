@@ -1,0 +1,25 @@
+# A low-risk action and the concise-mode follow-up.
+#
+# The timer speech is deterministic, so it is asserted exactly. The detail text
+# contains a generated id and an end time, so the second step asserts the tool,
+# the status, and the audit decision instead of the sentence.
+name: timer
+title: Timer and details
+description: Set a timer, then ask for the detail that concise mode withheld.
+
+steps:
+  - say: set a ten minute timer
+    expect:
+      tool: timer_set
+      status: ok
+      speech: "Timer set for 10 minutes."
+      detail_available: true
+      audit_decision: executed
+      pending: false
+
+  - say: tell me more
+    expect:
+      tool: tell_me_more
+      status: ok
+      audit_decision: no_change
+      pending: false

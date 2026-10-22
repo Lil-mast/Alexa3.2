@@ -1,0 +1,103 @@
+/*
+ * Amazon palette as tokens. Components must not use raw hex values.
+ * Contrast notes live in FRONTEND.md; orange is a fill, never small text on
+ * white.
+ */
+:root {
+  color-scheme: light;
+
+  --ink: #232f3e;
+  --ink-2: #37475a;
+  --ink-3: #4a5a6a;
+  --on-ink: #ffffff;
+  --on-ink-muted: #e6ebf0;
+  --ink-chip: rgb(255 255 255 / 10%);
+
+  --orange: #ff9900;
+  --orange-hover: #e88b00;
+
+  --blue: #146eb4;
+  --blue-hover: #0f5a94;
+  --focus: #146eb4;
+
+  --surface: #ffffff;
+  --canvas: #f2f3f3;
+  --border: #d5dbdb;
+
+  --text: #0f1111;
+  --text-muted: #565959;
+
+  --success: #067d62;
+  --danger: #d13212;
+  --attention: #8a5a00;
+  --success-bright: #2ecc8f;
+  --danger-bright: #ff6b4a;
+
+  --font-sans: "Amazon Ember", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+
+  --shadow-hover: 0 1px 2px rgb(15 17 17 / 8%);
+  --transition: 120ms ease-out;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--blue-hover);
+  text-decoration: underline;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -196,12 +196,13 @@ with the token. Even then, keep the startup check as a guard.
 
 ## D15. The audit log is separate from the trace
 
-**Decision:** The trace ring buffer is a debugging view. `audit_id` stays null
-until Day 3 adds an append-only, hash-chained audit table.
+**Decision:** The trace ring buffer is a debugging view. The audit log is a
+separate append-only, hash-chained store, and every response carries the
+`audit_id` of its row.
 
 **Why:** A ring buffer drops old entries and is not tamper-evident. Calling it an
-audit log would be dishonest. The response already has the field and the router
-has one place to fill it.
+audit log would be dishonest. Keeping them separate also means the trace can be
+truncated for display without weakening the record.
 
 **Revisit if:** never. The trace can be replaced, but it should not become the
 audit record.
@@ -320,3 +321,190 @@ tools render badly.
 
 **Revisit if:** never for the name. For punctuation, follow the publisher's
 style guide if one is adopted.
+
+## D25. Concise mode withholds `detail` on the server
+
+**Decision:** Concise mode defaults to on. When it is on, a response with a
+longer explanation returns `detail: null`, sets `detail_available: true`, and
+serves the text from per-subject memory through `tell_me_more`. With it off,
+`detail` is returned and the flag stays false.
+
+**Why:** The alternative, always sending `detail` and telling the client not to
+speak it, makes the server-side preference unobservable and `tell_me_more`
+pointless. Withholding also keeps the first response small, which is what
+"concise" is supposed to mean. `detail_available` exists because a client cannot
+offer a follow-up it does not know about.
+
+A preview is the exception: its detail explains that nothing has happened yet and
+is part of the confirmation, so it is never replaced by a flag that points at
+memory holding nothing.
+
+**Revisit if:** Alexa+ cannot branch on `detail_available`. Then return `detail`
+always and let the client decide, and record the preference as a client hint
+instead of a server rule.
+
+## D26. One global hash chain, a subject-scoped read view
+
+**Decision:** All rows form one chain, across users. `/api/audit` returns only the
+authenticated subject's rows. `/api/audit/verify` returns the row count, the head
+hash, and the first broken id, but no row contents.
+
+**Why:** A per-subject chain would let a caller prove their own actions but not
+that nothing was inserted into the store as a whole. Verification is a global
+safety property. Reading another household's actions is not part of that
+property, so the endpoint exposes the verdict without the contents.
+
+**Revisit if:** an operator console needs cross-subject rows. Add an explicit
+`audit:read` grant and a separate operator role rather than widening the user
+token.
+
+## D27. The audit row stores the inverse, never the request
+
+**Decision:** Each row holds the parameter hash, plus the minimal device state an
+undo needs: a light snapshot, a thermostat setpoint, a timer id, a booking id. It
+never stores the validated parameters or the confirmation token.
+
+**Why:** Undo must work after the handler code changes or the process restarts,
+and recomputing the inverse from a hash is impossible. The inverse is device
+state, not user speech, so it does not weaken D13. Storing the request would.
+
+**Revisit if:** a compensator needs a value that is neither an adapter reference
+nor prior device state. Add it as an explicit field with a new decision, not as a
+raw parameter blob.
+
+## D28. Undo targets the newest executed action and is not previewed
+
+**Decision:** `undo` with no parameters reverses the newest executed row for the
+subject. If that row is not reversible or was already reversed, the call is
+refused instead of reaching further back. Undo is low risk and is not previewed.
+The handler resolves the row, then checks the scopes the row recorded before the
+compensator runs.
+
+**Why:** "Undo that" refers to the last action, not to the last reversible one.
+Quietly skipping back would reverse something the user was not thinking about.
+Undo only reverses an action the user already confirmed, so a second confirmation
+would make every light restore a two-turn conversation. The authorization check
+still applies, and a booking cancellation is still gated by third-party sharing.
+
+**Revisit if:** a demo shows that undoing a booking needs its own confirmation.
+Then make `undo` risk depend on the target row and preview medium-risk targets
+only.
+
+## D29. Retention is enforced when the setting changes
+
+**Decision:** `privacy_set` with a new `retention_days` tombstones that subject's
+older rows in the same call. There is no background job.
+
+**Why:** The demo has no scheduler and no persistence, so a promised cleanup that
+never runs would be a false claim. A tombstone keeps the position, the hashes,
+the tool, and the decision, so the chain still verifies; it blanks the subject,
+the versions, the scopes, the parameter hash, and the compensation. The tradeoff
+is explicit: a tombstone proves sequence, not its own contents.
+
+**Revisit if:** rows are persisted. Then run a scheduled sweep and keep the
+on-change call as an immediate guarantee.
+
+## D30. The startup audit fixture is deterministic and not undoable
+
+**Decision:** `app/audit_seed.json` holds three fixed rows for `demo-user`. Their
+hashes are computed at boot, so the chain head is reproducible, and
+`/health` reports `audit_seeded`. Seeded rows carry no compensation.
+
+**Why:** App Runner clears the container on redeploy. Without a marker, an empty
+audit log looks like data loss or tampering. Fixed rows make the reset visible and
+reviewable, and the absence of compensation means "undo that" can never target
+fixture history.
+
+**Revisit if:** real persistence exists. Then seed only on an explicitly empty
+store and keep the marker.
+
+## D31. A read reports decision `no_change`
+
+**Decision:** `privacy_get` and `tell_me_more` return `status: ok` with decision
+`no_change`, and set `read_only` and `idempotent` on the manifest.
+
+**Why:** The existing decision vocabulary already has the right word for a valid
+call that changes no state. Reusing it avoids a fifth decision in a published
+contract, keeps reads out of the undo candidates, and lets the MCP
+`readOnlyHint` be derived from the manifest rather than hardcoded.
+
+**Revisit if:** the console needs to distinguish a read from a no-op write. Then
+add a `read` decision and bump the contract deliberately.
+
+## D32. Third-party sharing defaults to on
+
+**Decision:** `third_party_sharing` defaults to on, so `book_room` works out of
+the box. The demo turns it off to show the refusal.
+
+**Why:** Privacy-by-default would argue for off, but then the primary demo
+journey fails on a fresh install and the toggle has nothing to demonstrate. The
+tool is simulated and marked `external`, so the exposure during the demo is
+nominal. A real deployment should revisit this with the privacy owner.
+
+**Revisit if:** the server connects to a real booking service. Then default to
+off and make enabling it an explicit, audited user action.
+
+## D33. The console is a separate root package with no router or UI kit
+
+**Decision:** The console lives in `frontend/` at the repository root. It is
+React 19 and TypeScript, built by Vite, installed with pnpm. Navigation is a
+20-line hash route hook, and styling is CSS custom properties plus plain CSS. No
+router dependency and no component library.
+
+**Why:** The backend stays a pure Python package, and the console stays a pure
+frontend package, so neither build owns the other. Four flat screens do not need
+nested layouts or server-side routes, and a UI kit would fight a theme that is
+already 40 tokens. Hash routing keeps deep links working when the bundle is
+served from a subpath, with no server rewrite rule.
+
+**Revisit if:** the console grows past roughly six screens, needs guarded routes
+or server-side rendering. Then add a router deliberately and keep the theme
+tokens.
+
+## D34. The console uses the Amazon palette as tokens, not Amazon brand assets
+
+**Decision:** Colours, spacing, and type follow Amazon's public storefront
+palette, stored as tokens in `src/styles/theme.css`. No Amazon Ember font, no
+smile logo, no wordmark. Orange is a fill with ink text, never small text on
+white.
+
+**Why:** Palette continuity makes an internal operator tool feel like the
+product it supports, without implying that Amazon endorses or ships it. Amazon
+Ember is proprietary and cannot be bundled. Orange on white is about 2.1:1 and
+fails WCAG AA, while ink on orange is about 8.8:1; the token file and the
+contrast table in `FRONTEND.md` make that rule reviewable.
+
+**Revisit if:** a licensed brand kit arrives, or a designer supplies a distinct
+palette. Then replace tokens only, not component styles.
+
+## D35. The console writes through one REST endpoint that calls `Router.execute`
+
+**Decision:** Undo, privacy toggles, and the journey runner will call
+`POST /api/call/{tool}` with `{params, confirmation_token?}`. The endpoint builds
+the same principal as the other REST routes and calls `Router.execute`. It is not
+built yet.
+
+**Why:** Reading is easy over REST, but writes need auth, scopes, rules, privacy,
+confirmations, audit, and trace. Calling MCP from the browser would duplicate
+policy and add streaming and session handling. A server-side proxy would need a
+second credential. One thin endpoint keeps `Router.execute` the only execution
+path and returns the same `ToolResponse` that Alexa+ sees.
+
+**Revisit if:** the console needs batch calls or streaming progress. Then add a
+second named endpoint, not a wider version of this one.
+
+## D36. The console ships inside the backend image at `/console`
+
+**Decision:** FastAPI serves `frontend/dist` at `/console` with `StaticFiles`,
+mounted before the catch-all MCP mount and only when the directory exists. The
+Dockerfile copies the build into the image.
+
+**Why:** App Runner is the only public host (D19). A second service would double
+the deploy, the certificate, and the auth surface for a demo console. Serving
+from the same origin removes CORS in production and keeps the bearer token on one
+origin. The conditional mount means a checkout without a frontend build still
+starts.
+
+**Revisit if:** the console needs an independent release cadence, or it must sit
+behind an identity provider at the edge. Then host it separately and keep the
+write endpoint behind the same auth.

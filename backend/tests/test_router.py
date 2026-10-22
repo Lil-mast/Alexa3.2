@@ -7,8 +7,13 @@ from app.state import AppState
 from tests.conftest import ALL_SCOPES, make_settings
 
 
-def _router() -> Router:
-    return Router(AppState(settings=make_settings()))
+def _router(*, verbose: bool = False) -> Router:
+    state = AppState(settings=make_settings())
+    if verbose:
+        # Detail is omitted under the default concise mode; turn it off when the
+        # test is about the longer explanation rather than the spoken sentence.
+        state.privacy.update("test-user", {"concise_mode": False})
+    return Router(state)
 
 
 def _principal(*scopes: str, subject: str = "test-user") -> Principal:
@@ -16,7 +21,7 @@ def _principal(*scopes: str, subject: str = "test-user") -> Principal:
 
 
 def test_timer_set_executes_and_traces():
-    router = _router()
+    router = _router(verbose=True)
     response = router.execute("timer_set", {"duration_seconds": 600}, _principal(*ALL_SCOPES))
 
     assert response.status == "ok"
@@ -33,7 +38,7 @@ def test_timer_set_executes_and_traces():
 
 
 def test_lights_dim():
-    router = _router()
+    router = _router(verbose=True)
     response = router.execute("lights_set", {"room": "living_room", "brightness": 30}, _principal(*ALL_SCOPES))
 
     assert response.status == "ok"
@@ -92,7 +97,9 @@ def test_unauthenticated_call_refuses():
 
 
 def test_users_do_not_share_device_state():
-    router = _router()
+    state = AppState(settings=make_settings())
+    state.privacy.update("bob", {"concise_mode": False})
+    router = Router(state)
     alice = _principal(*ALL_SCOPES, subject="alice")
     bob = _principal(*ALL_SCOPES, subject="bob")
 
@@ -114,6 +121,7 @@ def test_unknown_tool():
 
 def test_thermostat_set_executes():
     state = AppState(settings=make_settings())
+    state.privacy.update("test-user", {"concise_mode": False})
     response = Router(state).execute("thermostat_set", {"zone": "office", "target_c": 22}, _principal(*ALL_SCOPES))
 
     assert response.status == "ok"

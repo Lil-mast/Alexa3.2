@@ -20,6 +20,7 @@ Alexa MCP server (FastAPI, Python)                 ← AWS only for the Alexa+ e
      │
      ▼
 SQLite (dev) / Postgres (deploy) for audit, settings, tokens
+(the demo build keeps them in process memory; see D12 and D29)
      ▲
      │  REST (JSON)
 React console (Vite + TypeScript): trace viewer, audit browser, privacy panel, journey runner
@@ -39,7 +40,7 @@ Alexa+ requires a round trip under 500 ms for MCP calls. Budget:
 | Auth and scope check | 10 ms |
 | Schema and rules validation | 5 ms |
 | Adapter call (simulated: 0 ms; real: capped at 300 ms with timeout) | ≤ 300 ms |
-| Audit write (async after response is sent where safe) | 0 ms on path |
+| Audit write (in-process append, before the response) | < 1 ms on path |
 | Serialization | 10 ms |
 
 Rules: no LLM call anywhere in the server's request path. Keep the process warm (no cold start on the request path). Set adapter timeouts so a slow upstream returns a structured `TIMEOUT` error, not a hang.
@@ -86,14 +87,19 @@ Descriptions are part of the product. Alexa+ uses them to choose tools, so each 
 {
   "status": "ok | confirmation_required | error",
   "speech": "Timer set for ten minutes.",
-  "detail": "Timer 'pasta' set for 10:00, ends at 18:42. Stored as timer_7f3.",
+  "detail": null,
+  "detail_available": true,
   "trace": [{"tool": "timer_set", "service": "timers", "ok": true, "ms": 4}],
-  "audit_id": "a_01HZ...",
+  "audit_id": "a_000004",
   "error": null
 }
 ```
 
-`speech` is always present and short. This is the concise mode default. `detail` is optional and only returned when the caller asks for it.
+`speech` is always present and short. This is the concise mode default. With
+concise mode on, `detail` is null and `detail_available` says a longer
+explanation exists; `tell_me_more` returns it. With concise mode off, `detail`
+carries that text and `detail_available` is false. `audit_id` points at the row
+for this decision, including a preview and a refusal.
 
 ## 4. Rules engine
 
@@ -114,29 +120,41 @@ Append-only table with a hash chain:
 
 | Column | Type | Notes |
 |---|---|---|
-| id | ULID | sortable |
+| id | text | `a_` plus a zero-padded sequence, stable across retention |
+| seq | int | position in the chain |
 | ts | timestamptz | server time |
-| user_ref | text | pseudonymous household id |
+| subject | text | pseudonymous household id |
 | tool | text | tool name |
 | tool_version | text | from manifest |
-| scope_used | text | scope that authorized the call |
+| rules_version | text | rule set that approved the call |
+| service | text | adapter group |
+| scopes_used | text[] | scopes the call relied on |
 | params_hash | text | SHA-256 of canonical JSON params |
-| params | json | omitted when retention setting is "minimal" |
 | decision | text | executed, previewed, refused, no_change |
-| result | text | ok, error code |
-| compensator_of | ULID | links an undo to the original action |
+| status | text | ok, confirmation_required, error |
+| error_code | text | taxonomy code when status is error |
+| result_ref | text | adapter reference such as `timer_7f3a` |
+| compensation | json | minimal inverse state for undo, never the request |
+| compensator_of | text | audit id of the action an undo reversed |
 | prev_hash | text | hash of previous row |
-| row_hash | text | SHA-256 over this row plus prev_hash |
+| row_hash | text | SHA-256 of the row fields plus prev_hash |
 
-**Verification.** A CLI command (`alexa audit verify`) recomputes the chain and reports the first broken link. The console shows a green or red chain status.
+Raw parameters are never stored. The parameter hash binds the row to the request
+without keeping what the user said, which is why `D13` holds for the audit too.
 
-**Retention.** A scheduled job deletes rows older than the user's retention setting. Deletion keeps a tombstone row (id, ts, tool, decision) so the chain stays verifiable.
+**Verification.** A CLI command (`alexa audit verify`) recomputes the chain and
+reports the first broken link. The console shows a green or red chain status.
+
+**Retention.** Changing `retention_days` replaces older rows for that subject
+with tombstones (id, ts, tool, decision, both hashes) so the chain stays
+verifiable. A scheduled sweep would replace the on-change call in production.
 
 ## 6. Rollback
 
-- Each reversible tool declares a `compensator`. Undo calls the compensator with the stored pre-state.
-- "Undo that" resolves to the most recent reversible action in the same session. The response names what will be undone and runs under the same risk tier as the original.
-- Irreversible tools are flagged `reversible=False`. Their preview states this clearly, and the confirmation text includes "This cannot be undone."
+- Each reversible tool declares a `compensator`. Undo calls the compensator with the pre-state stored in the original audit row.
+- "Undo that" resolves to the most recent executed action. The response names what was undone, and the new row links back with `compensator_of`.
+- Undo inherits the original action's authorization: it is refused when the caller lacks the scopes the original call used. It is not previewed again, because it only reverses an action the user already confirmed. Cancelling a booking is still gated by `third_party_sharing`.
+- Irreversible tools are flagged `reversible=False`. Their preview states this clearly, and the confirmation text includes "This cannot be undone." Undo cannot itself be undone.
 
 ## 7. Privacy model
 
@@ -147,14 +165,17 @@ class PrivacySettings(BaseModel):
     retention_days: Literal[0, 7, 30, 90] = 30   # 0 = keep only tombstones
     personalization: bool = True
     microphone_mode: Literal["wake_word", "continuous"] = "wake_word"  # declared, enforced by client
-    third_party_sharing: bool = False
+    third_party_sharing: bool = True
+    concise_mode: bool = True
 ```
 
-- `personalization=False`: the server ignores stored preferences during tool selection hints.
-- `third_party_sharing=False`: tools with `external=True` in their manifest are refused with `PRIVACY_BLOCKED`.
+- `personalization=False`: the server ignores the stored concise preference and keeps no per-action detail history.
+- `third_party_sharing=False`: tools with `external=True` in their manifest are refused with `PRIVACY_BLOCKED`. It defaults to on so the demo can turn it off and show the refusal.
 - `microphone_mode` is declared in the server's privacy manifest so Alexa+ can surface it. The server does not control the microphone.
+- `concise_mode=True`: responses omit `detail` and set `detail_available`.
 
-Every privacy change is itself an audit entry.
+Every privacy change is itself an audit entry, and a retention change is enforced
+by the same call.
 
 ## 8. Developer standard
 
@@ -191,14 +212,43 @@ The certification runner produces a report; the server reads a `certified: true`
 
 ## 9. Frontend console
 
-React + TypeScript (Vite). Four screens:
+React + TypeScript at `frontend/`, built by Vite, installed with pnpm, served by
+the backend at `/console`. The scaffold is in place; the screens are next. Four
+screens:
 
 - **Trace:** live list of tool calls with service, decision, latency, and audit id.
 - **Audit:** searchable log with chain status and an "undo" action where a compensator exists.
-- **Privacy:** the four toggles, each with a one-line explanation of its effect.
+- **Privacy:** the toggles, each with a one-line explanation of its effect.
 - **Journeys:** run the simulated journeys and see pass or fail per step.
 
-The console talks to the server over REST (`/api/trace`, `/api/audit`, `/api/privacy`, `/api/journeys`). It is an operator and developer tool, not the customer experience. Customer-facing confirmations are rendered by Alexa+.
+It reads `/health`, `/api/config`, `/api/whoami`, `/api/tools`, `/api/trace`,
+`/api/audit`, `/api/audit/verify`, and `/api/state`. Writes (undo, privacy
+toggles) go through one `POST /api/call/{tool}` endpoint that calls
+`Router.execute`. The assistant bar uses `/api/assistant/turn` and the session
+routes; the voice button uses `/api/voice/speak` and falls back to browser
+speech. Journeys are listed from `/api/journeys` and run through
+`/api/journeys/{name}/run` against an isolated app state. The console never
+duplicates a rule, and it renders decisions rather than making them. It is an
+operator and developer tool, not the customer experience: customer-facing
+confirmations are rendered by Alexa+.
+
+### Demo assistant and voice
+
+The backend ships a deterministic parser for the demo phrases. It is a stand-in
+for Alexa+'s intent layer, not a replacement: it returns parameters to
+`Router.execute`, which validates, authorizes, confirms, audits, and traces them
+exactly as it does for an MCP call. A preview is held per subject so the next
+"yes" completes the same single-use token. A clarification writes no audit row
+because no tool ran.
+
+The ElevenLabs proxy is optional and never in the decision path. It speaks the
+`speech` string the server already composed, keeps the API key server-side,
+caps the text, caches repeated phrases, and refuses with `PRIVACY_BLOCKED` when
+third-party sharing is off. A missing key returns a structured 503 so the
+console can use browser speech without changing the transcript.
+
+`FRONTEND.md` owns the design: theme tokens and contrast, diagrams, screen
+specs, the API contract, accessibility, testing, and the build plan.
 
 ## 10. Repository layout
 
@@ -209,21 +259,24 @@ alexa/
 ├── STANDARD.md
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI app, mounts /mcp and /api
+│   │   ├── main.py           # FastAPI app, mounts /mcp and the /api routers
 │   │   ├── mcp_server.py     # MCP tool registration (Streamable HTTP)
 │   │   ├── router.py         # schema validation, scope check
+│   │   ├── api/              # console, assistant, voice, and journey REST routes
+│   │   ├── assistant/        # deterministic parser, pending confirmation, replies
+│   │   ├── voice/            # ElevenLabs proxy and browser fallback contract
+│   │   ├── journeys/         # schema, loader, isolated runner, fixtures
 │   │   ├── rules/            # engine.py, rules/*.yaml
 │   │   ├── confirm.py        # tokens
 │   │   ├── audit.py          # hash-chained log
 │   │   ├── privacy.py
 │   │   ├── adapters/         # timers.py, lights.py, climate.py, media.py, booking.py (simulated)
 │   │   └── tools/            # ToolSpec manifests
-│   ├── tests/
-│   │   ├── unit/
-│   │   └── journeys/         # YAML journeys
+│   ├── tests/                # unit, HTTP, voice, journey, live MCP tests
 │   └── requirements.txt
 ├── frontend/
-│   ├── src/
+│   ├── src/                  # screens, typed API client, theme tokens
+│   ├── pnpm-workspace.yaml   # pnpm settings: build approvals, overrides
 │   └── package.json
 └── certification/
     └── run_certification.py
@@ -238,7 +291,7 @@ alexa/
 | 3 | Confirmation tokens, booking tool (simulated) | Preview, confirm, replay refused |
 | 4 | Audit log with hash chain, undo for lights and timers | `audit verify` passes; undo logged and linked |
 | 5 | Privacy toggles enforced | Third-party tool refused when toggled off |
-| 6 | Journeys and runner, console screens | Three journeys pass in CI |
+| 6 | Journeys and runner, console screens | Four journeys pass through the API and CLI; console screens render them |
 | 7 | Demo polish, `STANDARD.md`, certification report for booking tool | Demo script runs end to end |
 
 Cut order if time runs short: certification runner first (keep the checklist as a document), then the console's journey screen, then the booking tool. Never cut the rules engine, confirmations, or the audit log, because those are the principles the project is judged on.

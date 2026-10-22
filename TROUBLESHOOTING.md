@@ -172,10 +172,43 @@ update `pyproject.toml`, run `uv lock`, then regenerate.
 
 ## State disappeared after a restart
 
-All device state, pending confirmations, and the trace are in memory. A restart
-or a redeploy clears them. That is documented and safe for the demo: a pending
-confirmation becomes invalid and the user is asked again. The Day 3 audit table
-will make the reset visible instead of silent.
+All device state, pending confirmations, privacy settings, detail memory, the
+trace, and the audit chain are in memory. A restart or a redeploy clears them.
+That is documented and safe for the demo: a pending confirmation becomes invalid
+and the user is asked again.
+
+The audit log reseeds three fixed rows at boot from `app/audit_seed.json`, so
+`/health` reports `audit_seeded: true` and the reset reads as intentional. The
+seeded head hash is the same on every boot.
+
+## `audit verify` reports a broken chain
+
+The chain is checked in order. The CLI prints the first row id whose link or hash
+does not hold. A broken link after a redeploy with `audit_seeded: false` means
+the fixture did not load; check that `app/audit_seed.json` is in the image and
+parseable. A row hash mismatch means something edited a row in place, which only
+a test or a bug in a new code path should be able to do.
+
+Tombstones are expected: retention keeps their id, timestamp, tool, decision, and
+both hashes but blanks the rest, so verification checks the link and continues
+from the stored hash.
+
+## `undo` says the last action cannot be undone
+
+Undo targets the newest executed action, not the newest reversible one. A privacy
+change, a read, or an earlier undo can therefore be the blocker. Reads and
+no-op changes are skipped. Undo past a privacy change with an explicit
+`audit_id` if the console is the caller.
+
+If the original action used a scope the caller no longer holds, undo refuses with
+`AUTH_REQUIRED` before the adapter runs.
+
+## A booking is refused with PRIVACY_BLOCKED
+
+`third_party_sharing` is off for that subject. It is on by default. Turn it back
+on with `privacy_set`, or use the console. Cancelling an existing booking is
+blocked by the same setting, because a cancellation is also a call outside the
+household.
 
 ## Still stuck
 

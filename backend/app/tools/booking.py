@@ -82,9 +82,21 @@ def handle(params: dict, principal: Principal, state: AppState) -> HandlerResult
     detail = (
         f"Booking {booking.id}{named} for {booking.guests} guests on {human_date(params['date'])}, "
         f"{human_time(params['start_time'])} to {human_time(booking.end().strftime('%H:%M'))}. "
-        f"Cancellable with booking_cancel."
+        f"Cancellable with undo."
     )
-    return HandlerResult(speech=spoken, detail=detail)
+    # Undo cancels this booking by id. The row also keeps the room and time so
+    # the spoken confirmation can name what was cancelled.
+    return HandlerResult(
+        speech=spoken,
+        detail=detail,
+        result_ref=booking.id,
+        compensation={
+            "booking_id": booking.id,
+            "room": room,
+            "date": params["date"],
+            "start_time": params["start_time"],
+        },
+    )
 
 
 __all__ = ["SPEC", "handle"]

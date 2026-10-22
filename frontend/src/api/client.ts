@@ -1,0 +1,103 @@
+import type {
+  AuditList,
+  AuditVerify,
+  Health,
+  ToolList,
+  TraceList,
+  WhoAmI,
+} from "./types";
+
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+const TOKEN_KEY = "alexa.console.token";
+const REQUEST_TIMEOUT_MS = 8_000;
+
+/**
+ * The console reads the operator token from sessionStorage, never from
+ * localStorage and never from a build artifact. `VITE_CONSOLE_TOKEN` exists for
+ * local development only; it is compiled into the bundle, so it must not be set
+ * for a deployed build.
+ */
+export function readToken(): string {
+  const stored = window.sessionStorage.getItem(TOKEN_KEY) ?? "";
+  if (stored) {
+    return stored;
+  }
+  return import.meta.env.VITE_CONSOLE_TOKEN ?? "";
+}
+
+export function writeToken(token: string): void {
+  if (token) {
+    window.sessionStorage.setItem(TOKEN_KEY, token);
+  } else {
+    window.sessionStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly challenge: string | null;
+
+  constructor(status: number, message: string, challenge: string | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.challenge = challenge;
+  }
+}
+
+function messageFor(status: number): string {
+  if (status === 401) {
+    return "The operator token is missing or not accepted.";
+  }
+  if (status === 403) {
+    return "This token does not carry the scope for that read.";
+  }
+  if (status === 404) {
+    return "The server does not expose that endpoint.";
+  }
+  if (status >= 500) {
+    return `The server failed with status ${status}.`;
+  }
+  return `The request failed with status ${status}.`;
+}
+
+async function request<T>(path: string): Promise<T> {
+  const token = readToken();
+  const headers = new Headers({ Accept: "application/json" });
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new ApiError(0, "The server did not answer in time.");
+    }
+    throw new ApiError(0, "The server is unreachable.");
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      messageFor(response.status),
+      response.headers.get("www-authenticate"),
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+/** Read-only calls. Tool calls go through one endpoint, which is not built yet. */
+export const api = {
+  health: () => request<Health>("/health"),
+  whoami: () => request<WhoAmI>("/api/whoami"),
+  tools: () => request<ToolList>("/api/tools"),
+  trace: (limit = 50) => request<TraceList>(`/api/trace?limit=${limit}`),
+  audit: (limit = 50) => request<AuditList>(`/api/audit?limit=${limit}`),
+  verify: () => request<AuditVerify>("/api/audit/verify"),
+};

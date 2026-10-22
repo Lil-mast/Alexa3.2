@@ -8,7 +8,7 @@
 # Field keys must be quoted when YAML would read them as booleans: `on`, `off`,
 # `yes`, `no`. PyYAML uses YAML 1.1, where an unquoted `on:` key becomes True.
 
-version: "2"
+version: "3"
 
 # Single-use confirmation tokens (BUILD_PLAN.md section 3).
 confirmation:
@@ -104,3 +104,46 @@ tools:
         type: string
         max_length: 64
         label: Title
+
+  # Day 3. Undo and the detail lookup both accept an optional reference so the
+  # console can target a specific row; without one they act on the newest.
+  undo:
+    fields:
+      audit_id:
+        type: string
+        max_length: 32
+        label: Audit reference
+
+  tell_me_more:
+    fields:
+      audit_id:
+        type: string
+        max_length: 32
+        label: Audit reference
+
+  privacy_get:
+    fields: {}
+
+  privacy_set:
+    fields:
+      retention_days:
+        type: integer
+        enum: [0, 7, 30, 90]
+        display: "0, 7, 30, or 90 days"
+        label: Retention
+      personalization:
+        type: boolean
+        label: Personalization
+      microphone_mode:
+        type: string
+        enum: [wake_word, continuous]
+        enum_labels:
+          wake_word: wake word
+          continuous: continuous
+        label: Microphone mode
+      third_party_sharing:
+        type: boolean
+        label: Third-party sharing
+      concise_mode:
+        type: boolean
+        label: Concise mode

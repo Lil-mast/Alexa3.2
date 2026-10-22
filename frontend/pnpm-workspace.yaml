@@ -1,0 +1,12 @@
+# pnpm settings, not a monorepo definition. pnpm 12 reads build policy here.
+allowBuilds:
+  esbuild: true
+
+# Pinned to the versions already in the local store so an offline install is
+# reproducible. Remove once the registry is reachable and the lockfile is
+# regenerated online.
+overrides:
+  caniuse-lite: 1.0.30001817
+  electron-to-chromium: 1.5.461
+  node-releases: 2.0.59
+  baseline-browser-mapping: 2.11.30

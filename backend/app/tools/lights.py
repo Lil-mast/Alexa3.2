@@ -77,4 +77,11 @@ def handle(params: dict, principal: Principal, state: AppState) -> HandlerResult
         f"{room_name} lights are now {'on' if current.on else 'off'} at {current.brightness} percent "
         f"(previously {was}). Stored as lights_{room}."
     )
-    return HandlerResult(speech=spoken, detail=detail)
+    # Restore writes the exact previous snapshot back, including the brightness
+    # a room remembers while it is off.
+    return HandlerResult(
+        speech=spoken,
+        detail=detail,
+        result_ref=f"lights_{room}",
+        compensation={"room": room, "on": previous.on, "brightness": previous.brightness},
+    )

@@ -48,7 +48,14 @@ def handle(params: dict, principal: Principal, state: AppState) -> HandlerResult
         f"{named} set for {clock(timer.duration_s)}, ending at "
         f"{timer.ends_at.strftime('%H:%M:%S')} UTC. Stored as {timer.id}."
     )
-    return HandlerResult(speech=spoken, detail=detail)
+    # Undo cancels the timer by id. The audit row keeps that id, not the
+    # parameters, so "undo that" needs no request history.
+    return HandlerResult(
+        speech=spoken,
+        detail=detail,
+        result_ref=timer.id,
+        compensation={"timer_id": timer.id},
+    )
 
 
 __all__ = ["SPEC", "handle"]

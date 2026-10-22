@@ -12,6 +12,16 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
 
 from app import __version__
+from app.api import (
+    build_assistant_router,
+    build_call_router,
+    build_journeys_router,
+    build_meta_router,
+    build_privacy_router,
+    build_state_router,
+    build_voice_router,
+)
+from app.assistant.service import AssistantService
 from app.auth import Principal, build_rest_auth, build_verifier
 from app.config import Settings, get_settings, startup_warnings
 from app.logging_config import setup_logging
@@ -21,6 +31,7 @@ from app.rules import RULES
 from app.state import AppState
 from app.tools import REGISTRY, SCOPES, TOOLS, manifests
 from app.trace import TraceBuffer
+from app.voice.elevenlabs import ElevenLabsVoice
 
 
 def _transport_security(settings: Settings) -> TransportSecuritySettings:
@@ -52,6 +63,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # test app never shares timers or lights with the running server.
     state = AppState(settings=settings, trace=TraceBuffer(settings.trace_capacity))
     router = Router(state)
+    # The demo assistant is a client of the router, not a second execution path.
+    # It owns the parser and the pending confirmation, and every action still
+    # goes through Router.execute.
+    assistant = AssistantService(router)
+    # The voice client is per app so tests can inject a transport and the cache
+    # cannot leak between two app instances.
+    voice = ElevenLabsVoice(settings)
     mcp = build_mcp_server(settings, router, verifier)
 
     # Mount the MCP app at the root and let it own /mcp. Older Starlette versions
@@ -76,6 +94,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # A mounted app's lifespan does not run automatically, and the streamable
         # session manager needs it. Start it here so sessions have a manager.
         async with mcp_app.router.lifespan_context(mcp_app):
+            # A redeploy clears the containers. Say so once, in the log, with
+            # the number of seeded rows the console will show.
+            marker = state.audit.seed_marker
+            if marker:
+                startup_logger.info("audit_seeded", extra=marker)
             yield
 
     app = FastAPI(
@@ -86,6 +109,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     # Exposed for tests and for future console handlers that need runtime state.
     app.state.alexa = state
+    app.state.assistant = assistant
+    app.state.voice = voice
 
     # The console is a separate dev origin. Credentials are off because auth is
     # a bearer header, not a cookie.
@@ -131,6 +156,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "version": __version__,
             "rules_version": RULES.version,
             "tools": len(REGISTRY),
+            "audit_rows": len(state.audit),
+            # Present after startup seeding. A reset then reads as intentional
+            # instead of looking like lost data.
+            "audit_seeded": state.audit.seed_marker is not None,
         }
 
     @app.get("/api/whoami", tags=["console"])
@@ -156,6 +185,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         # snapshot() is newest first, which is the order the console expects.
         return {"entries": [event.model_dump(mode="json") for event in state.trace.snapshot()[:limit]]}
+
+    @app.get("/api/audit", tags=["console"])
+    async def get_audit(
+        limit: int = Query(default=50, ge=1, le=200),
+        principal: Principal = Depends(require_principal),
+    ) -> dict:
+        # The chain is global, but a caller only sees their own rows. The seed
+        # marker is shared metadata, not another user's data.
+        rows = [row for row in state.audit.snapshot() if row.subject == principal.subject and not row.tombstone]
+        return {
+            "seeded": state.audit.seed_marker,
+            "entries": [row.model_dump(mode="json") for row in rows[:limit]],
+        }
+
+    @app.get("/api/audit/verify", tags=["console"])
+    async def verify_audit(_: Principal = Depends(require_principal)) -> dict:
+        # Counts and the first broken id only. Verifying the chain is a global
+        # safety property; reading other subjects' rows is not part of it.
+        return state.audit.verify().model_dump(mode="json")
+
+    # The console, assistant, voice, and journey routes are built in app/api/ so
+    # each domain owns its request models and its comments. They all resolve the
+    # caller from the same verifier, and every write funnels through the router.
+    for api_router in (
+        build_meta_router(state, settings),
+        build_state_router(state, assistant, require_principal),
+        build_privacy_router(state, router, require_principal),
+        build_call_router(router, require_principal),
+        build_assistant_router(assistant, require_principal),
+        build_voice_router(settings, state, voice, require_principal),
+        build_journeys_router(settings, require_principal),
+    ):
+        app.include_router(api_router)
 
     # Mounted last so it only sees paths no other route claimed. This keeps
     # /health, /api, /docs, and the metadata route outside the MCP session code.

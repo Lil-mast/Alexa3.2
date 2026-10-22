@@ -53,7 +53,11 @@ Confirmation MUST NOT be inferred from the initial request or from a model-gener
 
 ## 5. Response and error contract
 
-Every tool response MUST include a status and a concise `speech` string. `detail` MAY carry a longer explanation. A response SHOULD include a `trace` and `audit_id` when an audit entry exists.
+Every tool response MUST include a status and a concise `speech` string. `speech` is the sentence to say: it MUST NOT depend on a later call or on client-side composition.
+
+`detail` MAY carry a longer explanation. When a response withholds `detail` because the user prefers concise answers, it MUST set `detail_available=true` so the client knows an explanation exists, and the same text MUST be retrievable through a detail tool such as `tell_me_more`. A response MUST NOT set `detail_available=true` when no text can be returned.
+
+A response SHOULD include a `trace`. Every decision, including a preview and a refusal, MUST return the `audit_id` of the row that records it.
 
 The protocol-level status is one of `ok`, `confirmation_required`, or `error`. The `confirmation_required` status is distinct from an error: it indicates that execution has not yet occurred and a valid confirmation is needed.
 
@@ -84,7 +88,9 @@ The server MUST append an audit record for executions and consequential decision
 
 Audit records MUST be append-only and hash-chained. Each row hash covers the row contents and the prior row hash. Verification MUST report the first broken link. Retention cleanup MUST preserve chain verifiability, for example by retaining a tombstone containing the record identifier, timestamp, tool, and decision.
 
-Reversible tools MUST declare a compensator and retain enough pre-action state to invoke it. An undo MUST be a new action with its own authorization, risk checks, and audit entry linked to the original. Irreversible tools MUST be clearly identified in the preview and MUST NOT claim to support undo.
+Reversible tools MUST declare a compensator and retain enough pre-action state to invoke it. An undo MUST be a new action with its own authorization and audit entry linked to the original. Undo MUST NOT reach further back than the most recent executed action: if that action cannot be reversed, the server MUST refuse rather than quietly reversing an older one. Irreversible tools MUST be clearly identified in the preview and MUST NOT claim to support undo.
+
+An undo inherits the authorization of the action it reverses: the server MUST check the scopes recorded on the original row before the compensator runs, and MUST NOT accept undo as a way around them. Re-confirming an undo is OPTIONAL when it only reverses an action the user already confirmed; if the server skips the preview, it MUST say so in the tool description and in this standard.
 
 ## 8. Privacy settings
 

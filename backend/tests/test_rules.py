@@ -81,9 +81,20 @@ def test_lights_brightness_bounds():
 
 def test_rules_are_versioned_data():
     # The rules are in YAML, loaded once, and versioned independently of code.
-    assert RULES.version == "2"
+    assert RULES.version == "3"
     assert RULES.confirmation.ttl_seconds == 300
     assert RULES.for_tool("thermostat_set").fields["target_c"].min == 16
+
+
+def test_retention_days_is_a_closed_integer_set():
+    # Day 3 adds the first integer enum. A range check would accept 1 day.
+    from app.tools import privacy
+
+    assert validate_params(privacy.SET_SPEC, {"retention_days": 7}) == {"retention_days": 7}
+    violation = _violation(privacy.SET_SPEC, {"retention_days": 1})
+    assert violation.error.code is ErrorCode.OUT_OF_BOUNDS
+    assert "0, 7, 30, or 90 days" in violation.error.message
+    assert violation.error.allowed == [0, 7, 30, 90]
 
 
 def test_yaml_enums_match_the_adapters():

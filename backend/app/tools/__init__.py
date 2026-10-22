@@ -7,12 +7,23 @@ from collections.abc import Callable
 from app.auth import Principal
 from app.models import HandlerResult
 from app.state import AppState
-from app.tools import booking, lights, thermostat, timers
+from app.tools import booking, details, lights, privacy, thermostat, timers, undo
 from app.tools.specs import ToolSpec
 
 Handler = Callable[[dict, Principal, AppState], HandlerResult]
 
-TOOLS: tuple[ToolSpec, ...] = (timers.SPEC, lights.SPEC, thermostat.SPEC, booking.SPEC)
+# Order is the order Alexa+ sees in `tools/list`. Actions first, then the
+# follow-up and control tools.
+TOOLS: tuple[ToolSpec, ...] = (
+    timers.SPEC,
+    lights.SPEC,
+    thermostat.SPEC,
+    booking.SPEC,
+    undo.SPEC,
+    details.SPEC,
+    privacy.GET_SPEC,
+    privacy.SET_SPEC,
+)
 
 # Name to manifest and name to handler. The router reads both, and the console
 # reads manifests(). Keep registration in one place so a tool cannot be listed
@@ -23,6 +34,10 @@ HANDLERS: dict[str, Handler] = {
     lights.SPEC.name: lights.handle,
     thermostat.SPEC.name: thermostat.handle,
     booking.SPEC.name: booking.handle,
+    undo.SPEC.name: undo.handle,
+    details.SPEC.name: details.handle,
+    privacy.GET_SPEC.name: privacy.get,
+    privacy.SET_SPEC.name: privacy.set_settings,
 }
 
 # Every scope the server knows about. Published in the RFC 9728 metadata so a

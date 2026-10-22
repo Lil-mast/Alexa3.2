@@ -56,7 +56,13 @@ def handle(params: dict, principal: Principal, state: AppState) -> HandlerResult
         f"{zone_name} thermostat set to {current.target_c} degrees Celsius "
         f"(previously {previous.target_c}). Stored as climate_{zone}."
     )
-    return HandlerResult(speech=spoken, detail=detail)
+    # Undo writes the previous setpoint back, which is itself a normal change.
+    return HandlerResult(
+        speech=spoken,
+        detail=detail,
+        result_ref=f"climate_{zone}",
+        compensation={"zone": zone, "target_c": previous.target_c},
+    )
 
 
 __all__ = ["SPEC", "handle"]

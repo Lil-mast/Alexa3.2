@@ -43,7 +43,9 @@ class FieldRule(BaseModel):
     # list of integers on the wire.
     min: int | float | None = None
     max: int | float | None = None
-    enum: list[str] | None = None
+    # Enum values may be strings or integers: `privacy_set.retention_days` is a
+    # closed set of day counts, not a numeric range.
+    enum: list[str | int] | None = None
     # Spoken names for enum values, used in errors and previews. Never say
     # "living_room" or "oak" to a user when a nicer name is declared.
     enum_labels: dict[str, str] = Field(default_factory=dict)
@@ -189,10 +191,15 @@ def _check_value(rule: FieldRule, field: str, value: Any) -> None:
     _check_type(rule, field, value)
 
     # Enumerations before numeric bounds: a bad room should get a room message,
-    # not a generic range message.
+    # not a generic range message. A declared `display` wins, so a closed set
+    # such as retention days can read as a sentence instead of a list.
     if rule.enum is not None and value not in rule.enum:
-        spoken = ", ".join(rule.enum_labels.get(choice, choice.replace("_", " ")) for choice in rule.enum)
-        raise _out_of_bounds(field, f"{label} must be one of: {spoken}.", allowed=list(rule.enum))
+        if rule.display:
+            message = f"{label} must be {rule.display}"
+        else:
+            spoken = ", ".join(rule.enum_labels.get(str(choice), str(choice).replace("_", " ")) for choice in rule.enum)
+            message = f"{label} must be one of: {spoken}."
+        raise _out_of_bounds(field, message, allowed=list(rule.enum))
 
     if rule.type in {"integer", "number"}:
         bounds = [bound for bound in (rule.min, rule.max) if bound is not None]

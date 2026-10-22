@@ -107,13 +107,17 @@ class ToolResponse(BaseModel):
     """The single response shape for MCP tools and the console.
 
     `confirmation_required` is deliberately not an error: nothing has executed
-    yet and the client should present the preview and ask the user. `audit_id`
-    stays null until the hash-chained audit log lands on Day 3.
+    yet and the client should present the preview and ask the user.
+
+    `audit_id` points at the hash-chained row for this call, for every decision.
+    `detail` is present only when the user has concise mode off; otherwise
+    `detail_available` is true and `tell_me_more` can fetch the text later.
     """
 
     status: Literal["ok", "confirmation_required", "error"]
     speech: str
     detail: str | None = None
+    detail_available: bool = False
     trace: list[TraceEvent] = Field(default_factory=list)
     audit_id: str | None = None
     error: ToolError | None = None
@@ -123,15 +127,26 @@ class ToolResponse(BaseModel):
 
 @dataclass(frozen=True)
 class HandlerResult:
-    """What a tool handler returns before the router adds trace and status.
+    """What a tool handler returns before the router adds trace, audit, and status.
 
     `no_change` is an outcome, not a failure: the request was valid, and the
-    state already matched it. STANDARD.md asks for that to be visible.
+    state already matched it. STANDARD.md asks for that to be visible. A
+    read-only tool also reports `no_change`, because a read changes no state.
+
+    `compensation` is the minimal inverse state an undo needs, and is recorded in
+    the audit row, not in the trace. `compensator_of` is set only by an undo.
     """
 
     speech: str
     detail: str | None = None
     decision: Literal["executed", "no_change"] = "executed"
+    # A stable adapter reference such as `timer_7f3a`. Safe to speak and to log.
+    result_ref: str | None = None
+    compensation: dict[str, Any] | None = None
+    compensator_of: str | None = None
+    # Which scopes this call actually relied on. The router falls back to the
+    # tool's declared scopes when a handler does not narrow them.
+    scopes_used: list[str] | None = None
 
 
 class RuleViolation(Exception):

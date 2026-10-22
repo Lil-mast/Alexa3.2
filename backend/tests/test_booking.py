@@ -221,7 +221,9 @@ def test_past_date_is_refused():
 
 
 def test_title_appears_in_detail():
-    router, _ = _setup()
+    state = AppState(settings=make_settings())
+    state.privacy.update("test-user", {"concise_mode": False})
+    router = Router(state)
     params = {"date": _booking_date(), "title": "Design review"}
     preview = _preview(router, params)
     response = router.execute("book_room", params, _principal(), confirmation_token=preview.confirmation_token)

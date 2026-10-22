@@ -11,6 +11,8 @@ Examples, from `backend/` while the server runs on port 8000:
     python -m app.cli call timer_set '{"duration_seconds": 600}'
     python -m app.cli call lights_set '{"room": "living_room", "brightness": 30}'
     python -m app.cli bench --n 100
+    python -m app.cli audit verify
+    python -m app.cli audit list --limit 20
 
 Set `ALEXA_MCP_URL` and `ALEXA_TOKEN` to point at a deployed instance.
 """
@@ -131,6 +133,43 @@ async def _whoami(url: str, token: str) -> int:
     return 0 if response.is_success else 1
 
 
+async def _audit_verify(url: str, token: str) -> int:
+    """Walk the server's hash chain and report the first broken link.
+
+    The check runs on the server: the chain is global, and the CLI only needs the
+    verdict. Exit 1 on a broken chain so a demo script or CI can gate on it.
+    """
+    async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
+        response = await client.get(f"{_api_base(url)}/api/audit/verify")
+    payload = response.json()
+    if not response.is_success:
+        print(json.dumps(payload, indent=2, ensure_ascii=False), file=sys.stderr)
+        return 2
+    if payload.get("ok"):
+        print(f"audit chain ok: {payload['rows']} rows, head {str(payload.get('head', ''))[:12]}")
+        return 0
+    print(
+        f"audit chain broken at {payload.get('first_bad')}: {payload.get('reason')}",
+        file=sys.stderr,
+    )
+    return 1
+
+
+async def _audit_list(url: str, token: str, limit: int) -> int:
+    async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
+        response = await client.get(f"{_api_base(url)}/api/audit", params={"limit": limit})
+    payload = response.json()
+    if not response.is_success:
+        print(json.dumps(payload, indent=2, ensure_ascii=False), file=sys.stderr)
+        return 2
+    for entry in payload["entries"]:
+        print(f"{entry['id']}  {entry['ts']}  {entry['tool']:<14} {entry['decision']:<10} {entry['status']}")
+    seeded = payload.get("seeded")
+    if seeded:
+        print(f"seeded from {seeded['fixture']} ({seeded['rows']} rows)")
+    return 0
+
+
 async def _run(args: argparse.Namespace) -> int:
     if args.command == "tools":
         return await _list_tools(args.url, args.token)
@@ -138,6 +177,10 @@ async def _run(args: argparse.Namespace) -> int:
         return await _whoami(args.url, args.token)
     if args.command == "call":
         return await _call(args.url, args.token, args.tool, args.params)
+    if args.command == "audit":
+        if args.audit_command == "verify":
+            return await _audit_verify(args.url, args.token)
+        return await _audit_list(args.url, args.token, args.limit)
     return await _bench(args.url, args.token, args.tool, args.params, args.n)
 
 
@@ -187,6 +230,12 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--params", default='{"room": "office", "brightness": 50}')
     bench.add_argument("--n", type=int, default=50)
 
+    audit = commands.add_parser("audit", help="inspect and verify the hash-chained audit log")
+    audit_commands = audit.add_subparsers(dest="audit_command", required=True)
+    audit_commands.add_parser("verify", help="walk the chain and report the first broken link")
+    audit_list = audit_commands.add_parser("list", help="show this token's recent audit rows")
+    audit_list.add_argument("--limit", type=int, default=20)
+
     args = parser.parse_args(argv)
     if args.command in {"call", "bench"}:
         try:
@@ -195,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
     if args.command == "bench" and args.n < 1:
         parser.error("--n must be at least 1")
+    if args.command == "audit" and args.audit_command == "list" and args.limit < 1:
+        parser.error("--limit must be at least 1")
 
     try:
         return asyncio.run(_run(args))

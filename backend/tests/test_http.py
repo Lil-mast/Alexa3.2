@@ -7,9 +7,15 @@ import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from tests.conftest import TEST_TOKEN
+from app.auth import Principal
+from app.router import Router
+from tests.conftest import ALL_SCOPES, TEST_TOKEN
 
 AUTH = {"Authorization": f"Bearer {TEST_TOKEN}"}
+
+
+def _principal(subject: str = "test-user") -> Principal:
+    return Principal(subject=subject, client_id="test-client", scopes=tuple(ALL_SCOPES))
 
 
 def test_health_is_open(client):
@@ -17,8 +23,9 @@ def test_health_is_open(client):
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
-    assert response.json()["tools"] == 4
-    assert response.json()["rules_version"] == "2"
+    assert response.json()["tools"] == 8
+    assert response.json()["rules_version"] == "3"
+    assert response.json()["audit_seeded"] is True
 
 
 def test_console_api_requires_a_token(client):
@@ -33,7 +40,7 @@ def test_console_api_lists_manifests(client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["rules_version"] == "2"
+    assert payload["rules_version"] == "3"
     assert payload["confirmation_ttl_seconds"] == 300
     tools = {tool["name"]: tool for tool in payload["tools"]}
     assert tools["timer_set"]["risk"] == "low"
@@ -102,7 +109,16 @@ async def test_mcp_lists_and_calls_tools(live_server):
 
                 tools = await session.list_tools()
                 by_name = {tool.name: tool for tool in tools.tools}
-                assert set(by_name) == {"timer_set", "lights_set", "thermostat_set", "book_room"}
+                assert set(by_name) == {
+                    "timer_set",
+                    "lights_set",
+                    "thermostat_set",
+                    "book_room",
+                    "undo",
+                    "tell_me_more",
+                    "privacy_get",
+                    "privacy_set",
+                }
                 # The MCP manifest carries the same title and hints as the
                 # console manifest. A client can render a picker and decide
                 # whether a retry is safe without guessing.
@@ -110,6 +126,10 @@ async def test_mcp_lists_and_calls_tools(live_server):
                 assert by_name["timer_set"].annotations.idempotent_hint is False
                 assert by_name["lights_set"].annotations.idempotent_hint is True
                 assert by_name["book_room"].annotations.open_world_hint is True
+                # Read tools advertise the hint, so a client does not treat a
+                # detail lookup with the same caution as a write.
+                assert by_name["tell_me_more"].annotations.read_only_hint is True
+                assert by_name["privacy_set"].annotations.read_only_hint is False
                 assert by_name["timer_set"].output_schema is not None
                 assert "properties" in by_name["timer_set"].output_schema
                 # The injected Context parameter must not appear in the tool schema.
@@ -125,7 +145,13 @@ async def test_mcp_lists_and_calls_tools(live_server):
                 assert payload is not None
                 assert payload["status"] == "ok"
                 assert payload["speech"] == "Timer set for 10 minutes."
-                assert payload["audit_id"] is None
+                # Every decision now points at an audit row, including a preview
+                # or a refusal. The id is stable and appears in the console.
+                assert payload["audit_id"].startswith("a_")
+                # Concise mode is the default, so the detail is withheld and
+                # flagged instead of sent.
+                assert payload["detail"] is None
+                assert payload["detail_available"] is True
                 assert payload["trace"][0]["service"] == "timers"
 
                 lights = await session.call_tool("lights_set", {"room": "living_room", "brightness": 30})
@@ -203,3 +229,91 @@ async def test_mcp_traces_appear_in_the_console(live_server):
     entries = trace.json()["entries"]
     assert entries[0]["tool"] == "lights_set"
     assert entries[0]["status"] == "ok"
+
+
+def test_audit_endpoint_lists_only_the_callers_rows(client):
+    state = client.app.state.alexa
+    router = Router(state)
+    router.execute("timer_set", {"duration_seconds": 60}, _principal())
+    router.execute("timer_set", {"duration_seconds": 60}, _principal(subject="someone-else"))
+
+    response = client.get("/api/audit", headers=AUTH)
+
+    assert response.status_code == 200
+    payload = response.json()
+    # The seed marker is shared metadata so a reset reads as intentional.
+    assert payload["seeded"]["seeded"] is True
+    assert payload["seeded"]["rows"] == 3
+    entries = payload["entries"]
+    assert len(entries) == 1
+    assert entries[0]["subject"] == "test-user"
+    assert entries[0]["tool"] == "timer_set"
+    assert entries[0]["decision"] == "executed"
+    assert entries[0]["rules_version"] == "3"
+
+
+def test_audit_verify_reports_a_healthy_chain(client):
+    response = client.get("/api/audit/verify", headers=AUTH)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["rows"] >= 3
+    assert payload["first_bad"] is None
+
+
+@pytest.mark.asyncio
+async def test_mcp_undo_is_linked_in_the_audit(live_server):
+    # The Day 3 exit check over the real transport: an action, an undo, a chain
+    # that verifies, and an undo row that points at what it reversed.
+    async with httpx2.AsyncClient(headers=AUTH, timeout=15.0) as http_client:
+        async with streamable_http_client(live_server, http_client=http_client) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                # The server is module scoped, so establish a known light state
+                # before the action under test instead of assuming a fresh one.
+                await session.call_tool("lights_set", {"room": "kitchen", "on": False})
+                action = await session.call_tool("lights_set", {"room": "kitchen", "brightness": 20})
+                assert action.structured_content is not None
+                assert action.structured_content["status"] == "ok"
+
+                undone = await session.call_tool("undo", {})
+                payload = undone.structured_content
+                assert payload is not None
+                assert payload["status"] == "ok"
+                assert payload["speech"] == "Kitchen lights off again."
+
+                audit = await http_client.get(live_server.replace("/mcp", "/api/audit"))
+                verify = await http_client.get(live_server.replace("/mcp", "/api/audit/verify"))
+
+    assert verify.status_code == 200
+    assert verify.json()["ok"] is True
+
+    entries = audit.json()["entries"]
+    undo_row = next(entry for entry in entries if entry["tool"] == "undo")
+    action_row = next(entry for entry in entries if entry["tool"] == "lights_set")
+    assert undo_row["compensator_of"] == action_row["id"]
+    assert undo_row["result_ref"] == action_row["id"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_privacy_gate_refuses_booking(live_server):
+    booking_date = (datetime.now(UTC).date() + timedelta(days=4)).isoformat()
+
+    async with httpx2.AsyncClient(headers=AUTH, timeout=15.0) as http_client:
+        async with streamable_http_client(live_server, http_client=http_client) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                await session.call_tool("privacy_set", {"third_party_sharing": False})
+
+                result = await session.call_tool("book_room", {"date": booking_date})
+
+                payload = result.structured_content
+                assert payload is not None
+                assert payload["status"] == "error"
+                assert payload["error"]["code"] == "PRIVACY_BLOCKED"
+                assert payload["confirmation_token"] is None
+
+                # Leave the shared module-scoped server as it was found.
+                await session.call_tool("privacy_set", {"third_party_sharing": True})
