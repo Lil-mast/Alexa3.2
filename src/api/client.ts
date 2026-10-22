@@ -4,8 +4,10 @@ import type {
   AuditList,
   AuditVerify,
   Health,
+  HouseState,
   ToolList,
   TraceList,
+  VoiceConfig,
   WhoAmI,
   AssistantReply,
 } from "./types";
@@ -165,6 +167,10 @@ export const api = {
   trace: (limit = 50) => request<TraceList>(`/api/trace?limit=${limit}`),
   audit: (limit = 50) => request<AuditList>(`/api/audit?limit=${limit}`),
   verify: () => request<AuditVerify>("/api/audit/verify"),
+  house: () => request<HouseState>("/api/state"),
+  voiceConfig: () => request<VoiceConfig>("/api/voice/config"),
   assistantTurn: (utterance: string) => post<AssistantReply>("/api/assistant/turn", { utterance }),
+  assistantConfirm: () => post<AssistantReply>("/api/assistant/confirm"),
+  assistantCancel: () => post<AssistantReply>("/api/assistant/cancel"),
   speak: (text: string) => requestAudio("/api/voice/speak", { text }),
 };

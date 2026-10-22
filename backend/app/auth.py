@@ -61,7 +61,7 @@ class Principal:
 
 def parse_tokens(raw: str) -> dict[str, TokenRecord]:
     # Fail at startup, not on the first request: a malformed table would
-    # otherwise look like an auth outage in the middle of a demo.
+    # otherwise look like an auth outage in the middle of a live session.
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:

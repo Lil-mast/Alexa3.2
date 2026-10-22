@@ -35,15 +35,15 @@ from app.config import Settings
 
 logger = logging.getLogger("alexa.accounts")
 
-DEMO_NOTICE = "Demo house resets after inactivity or redeploy. Your account and sign-in stay."
+HOUSE_NOTICE = "Your house resets after inactivity or a redeploy. Your account and sign-in stay."
 
 # The state only lives for the trip through Google's consent screen. Ten minutes
 # is long enough to sign in, short enough that abandoned rows do not accumulate.
 OAUTH_STATE_TTL_SECONDS = 600
-DEFAULT_REDIRECT_AFTER = "/demo"
+DEFAULT_REDIRECT_AFTER = "/house"
 
 # A relative SPA route without a scheme or host. The frontend uses hash routing,
-# so this value is the part after `#`: `/demo`, `/console/audit`, and so on.
+# so this value is the part after `#`: `/house`, `/console/audit`, and so on.
 _REDIRECT_RE = re.compile(r"^/[A-Za-z0-9/?#=&._~%-]{0,199}$")
 
 
@@ -56,8 +56,8 @@ def normalize_redirect_after(raw: str | None) -> str:
     if not raw:
         return DEFAULT_REDIRECT_AFTER
     value = raw.strip()
-    # Accept the full hash form too, so a caller can pass `/#/demo` without
-    # producing `/#/#/demo` after the callback composes the URL.
+    # Accept the full hash form too, so a caller can pass `/#/house` without
+    # producing `/#/#/house` after the callback composes the URL.
     if value.startswith("/#"):
         value = value[1:]
     if value.startswith("#/"):
@@ -275,7 +275,7 @@ class AuthService:
 
 __all__ = [
     "DEFAULT_REDIRECT_AFTER",
-    "DEMO_NOTICE",
+    "HOUSE_NOTICE",
     "OAUTH_STATE_TTL_SECONDS",
     "AuthFlowError",
     "AuthService",

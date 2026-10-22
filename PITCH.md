@@ -14,20 +14,20 @@ Every decision is visible and accountable. The server records actions and refusa
 
 | | Alexa+ conversation experience | Alexa 3.5 action layer |
 |---|---|---|
-| Understands natural speech and manages the customer experience | Yes; Alexa+ owns the conversation and confirmation presentation | The server does not replace this. The demo assistant is a bounded command parser. |
+| Understands natural speech and manages the customer experience | Yes; Alexa+ owns the conversation and confirmation presentation | The server does not replace this. The assistant is a bounded command parser. |
 | Chooses and executes actions | Selects tools and provides the user-facing experience | Validates and executes authorized MCP tool calls through one rules-controlled path |
 | Risk controls | Provided by the Alexa+ experience and its integrations | Explicit scopes, parameter rules, previews, single-use confirmation tokens, and privacy gates |
 | Accountability | Product-level experience | Trace plus append-only, hash-chained audit records; undo where supported |
-| Integrations in this build | Alexa+ is the intended MCP client | Demo adapters are simulated; real device and service integrations are follow-up work |
+| Integrations in this build | Alexa+ is the intended MCP client | Adapters are simulated; real device and service integrations are follow-up work |
 
-**In short:** Alexa 3.5 is designed to complement Alexa+, not replace its voice interface or conversation intelligence. The current web demo adds browser dictation and spoken replies, but it is not a full-duplex speech-to-speech system.
+**In short:** Alexa 3.5 is designed to complement Alexa+, not replace its voice interface or conversation intelligence. The current web app adds browser dictation and spoken replies, but it is not a full-duplex speech-to-speech system.
 
 ## Design System
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "20px"}, "flowchart": {"nodeSpacing": 65, "rankSpacing": 85}}}%%
 flowchart LR
-	Person[User request] --> Client[Alexa+ or demo client<br/>interprets intent]
+	Person[User request] --> Client[Alexa+ or client<br/>interprets intent]
 	Client -->|MCP tool call| Gateway[Authenticated MCP server]
 	Gateway --> Manifest[Tool contract<br/>purpose · schema · scopes · risk]
 	Manifest --> Router[One execution path]
@@ -48,7 +48,7 @@ flowchart LR
 
 The risk-aware path avoids unnecessary friction: low-risk validated calls execute directly, while consequential calls pause for an explicit confirmation tied to the exact parameters. Successes and refusals return a consistent speech and error contract, with trace and audit evidence; reversible actions can be undone through a separately authorized action. YAML journeys test these paths as repeatable scenarios.
 
-The operator console is built with React and TypeScript and uses an Amazon-inspired palette with reusable design tokens. Its Talk, Trace, Audit, Privacy, and Journeys surfaces make the demo operable and the system inspectable. It is a developer/operator interface, not a replacement for Alexa+'s customer UI.
+The operator console is built with React and TypeScript and uses an Amazon-inspired palette with reusable design tokens. Its Talk, Trace, Audit, Privacy, and Journeys surfaces make the system operable and inspectable. It is a developer/operator interface, not a replacement for Alexa+'s customer UI.
 
 ## Impact
 
@@ -61,6 +61,6 @@ The goal is to make voice-driven actions more predictable, reviewable, and recov
 
 These are design goals, not measured production outcomes. The current build is a hackathon prototype with simulated state and adapters; the next impact step is integrating real services and evaluating the complete Alexa+ flow.
 
-## Optional Demo Close
+## Optional Closing Sequence
 
 “Set a ten-minute timer” shows a validated low-risk action. A thermostat value outside the allowed range demonstrates a deterministic refusal. A room booking demonstrates preview, explicit confirmation, and an audit entry. Finally, undo shows how a reversible action can be compensated and linked to its original record.

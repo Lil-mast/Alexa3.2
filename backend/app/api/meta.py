@@ -76,7 +76,7 @@ def build_meta_router(state: AppState, settings: Settings) -> APIRouter:
             assistant=AssistantConfig(
                 mode="deterministic",
                 endpoint="/api/assistant/turn",
-                note="Alexa+ owns intent in production. This endpoint is a demo stand-in.",
+                note="Alexa+ owns intent in production. This endpoint is a local stand-in.",
             ),
             voice=VoiceConfig(
                 enabled=settings.voice_enabled,

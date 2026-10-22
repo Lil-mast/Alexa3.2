@@ -24,6 +24,13 @@ export interface WhoAmI {
   scopes: string[];
 }
 
+export interface PendingAction {
+  tool: string;
+  effect: string;
+  expires_at: string;
+  ttl_seconds: number;
+}
+
 export interface AssistantReply {
   understood: boolean;
   status: "ok" | "confirmation_required" | "error" | "clarification" | "cancelled";
@@ -31,10 +38,66 @@ export interface AssistantReply {
   detail?: string | null;
   detail_available: boolean;
   intent?: { tool: string; params: Record<string, unknown>; rationale: string } | null;
-  pending?: { tool: string; effect: string; expires_at: string; ttl_seconds: number } | null;
+  pending?: PendingAction | null;
   suggestions: string[];
   trace_id?: string | null;
   audit_id?: string | null;
+}
+
+export interface VoiceConfig {
+  enabled: boolean;
+  provider: "elevenlabs";
+  model: string;
+  max_chars: number;
+  fallback: "browser_speech_synthesis";
+}
+
+export interface HouseTimer {
+  id: string;
+  label: string | null;
+  duration_s: number;
+  started_at: string;
+  ends_at: string;
+  remaining_s: number;
+}
+
+export interface HouseLight {
+  room: string;
+  room_name: string;
+  on: boolean;
+  brightness: number;
+  updated_at: string;
+}
+
+export interface HouseClimate {
+  zone: string;
+  zone_name: string;
+  target_c: number;
+  updated_at: string;
+}
+
+export interface HouseBooking {
+  id: string;
+  room: string;
+  room_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  guests: number;
+  title: string | null;
+}
+
+/** The server's view of one household. Read-only; every change goes through the assistant. */
+export interface HouseState {
+  subject: string;
+  server_time: string;
+  rules_version: string;
+  timers: HouseTimer[];
+  lights: HouseLight[];
+  climate: HouseClimate[];
+  bookings: HouseBooking[];
+  pending: PendingAction | null;
 }
 
 export interface TraceEvent {

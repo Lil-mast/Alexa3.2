@@ -107,7 +107,7 @@ Every privacy-setting change MUST be audited.
 
 A journey is a YAML test case containing an ordered sequence of utterances or tool calls, expected tool choices, response statuses or error codes, and expected audit effects. The runner MUST fail a journey when any expectation differs from the observed result.
 
-The suite SHOULD cover successful actions, ambiguous inputs, invalid and out-of-bounds parameters, missing authorization, privacy refusals, confirmation success, changed parameters, token expiry and replay, adapter failures, and undo flows. Demo adapters MUST be identified as simulations; they MUST NOT be represented as real device integrations.
+The suite SHOULD cover successful actions, ambiguous inputs, invalid and out-of-bounds parameters, missing authorization, privacy refusals, confirmation success, changed parameters, token expiry and replay, adapter failures, and undo flows. Simulated adapters MUST be identified as simulations; they MUST NOT be represented as real device integrations.
 
 ## 10. High-risk certification
 

@@ -107,10 +107,10 @@ booking:rooms:write privacy:settings:write`. Replace
 | POST | `/api/journeys/{name}/run` | Bearer | Run one journey against an isolated app state |
 | GET | `/.well-known/oauth-protected-resource/mcp` | none | RFC 9728 metadata |
 
-### The demo brain and the voice proxy
+### The assistant brain and the voice proxy
 
 `POST /api/assistant/turn` is not a second decision path. It is a deterministic
-parser that maps the demo's spoken phrases to the same `Router.execute` call an
+parser that maps the spoken phrases to the same `Router.execute` call an
 MCP client makes. It never calls a model, never writes adapter state, and never
 composes tool speech. When a preview is issued, the server holds the single-use
 token for the next turn; `confirm`, `cancel`, and the words "yes" and "no" all
@@ -144,7 +144,7 @@ curl -s -X POST localhost:8000/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
-The demo assistant and the console write path, both through the same router:
+The assistant and the console write path, both through the same router:
 
 ```bash
 curl -s -X POST localhost:8000/api/assistant/turn \
@@ -281,7 +281,7 @@ no-op changes, so "undo that" always means the last real change. Pass `audit_id`
 to target a specific action from the console.
 
 The undo row records `compensator_of` and `result_ref` pointing at the original
-audit id, which is the link the console and the demo show. Undo declares no
+audit id, which is the link the console and the house screen show. Undo declares no
 scopes of its own: the handler resolves the target row and checks the scopes that
 row recorded before any adapter runs. Cancelling a booking is gated by
 `third_party_sharing` because it reaches a service outside the household.
@@ -304,7 +304,7 @@ written to the audit chain. `privacy_get` reports the current values.
 There is no model, training data, or external dataset in this path. Alexa
 is deterministic code, so the data it needs is small and explicit:
 
-| Data | Where it lives now | Needed for the demo |
+| Data | Where it lives now | Needed for the walkthrough |
 |---|---|---|
 | Static bearer tokens and their scopes | `ALEXA_TOKENS_JSON`, parsed at startup | Yes, one dev token |
 | Users, sessions, OAuth states, exchange codes | SQLite locally, Render Postgres in production | Yes, created by sign-in |
@@ -319,7 +319,7 @@ is deterministic code, so the data it needs is small and explicit:
 Accounts and sessions persist. Everything else is in process memory: a
 redeploy or restart clears timers, lights, climate, bookings, traces, privacy
 settings, pending confirmations, and the audit chain. `BUILD_PLAN.md` accepts
-that tradeoff for the demo, so the server rebuilds a known seeded chain at boot
+that tradeoff for now, so the server rebuilds a known seeded chain at boot
 and reports the marker. A lost confirmation is safe: the user is asked again.
 
 ### How Alexa+ uses the data
@@ -337,7 +337,7 @@ and reports the marker. A lost confirmation is safe: the user is asked again.
 5. Alexa+ never receives device credentials and never writes state directly.
 
 So the only data input you need to prepare is a token (already in `.env.example`).
-Everything else is created by the demo calls. If you later attach real devices,
+Everything else is created by assistant calls. If you later attach real devices,
 the adapter boundary is where a device API or a Postgres state store plugs in,
 and `subject` becomes the household key for both state and audit rows.
 
@@ -428,6 +428,6 @@ backend/
 - Wire the sign-in, callback, and account screens to the auth routes.
 - Finish the React console screens: Trace, Audit, Privacy, Journeys, and the
   assistant bar.
-- Set `ALEXA_ELEVENLABS_API_KEY` for the demo, or rely on browser speech.
+- Set `ALEXA_ELEVENLABS_API_KEY` for the voice, or rely on browser speech.
 - Deploy the API to Render with Postgres, the console to Vercel, and rehearse
   against the deployed origins.

@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles/theme.css";
 import "./styles/app.css";
 import "./styles/landing.css";
+import "./styles/house.css";
 
 const root = document.getElementById("root");
 if (!root) {

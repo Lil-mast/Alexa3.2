@@ -2,7 +2,7 @@
 
 **Goal:** Ship a deterministic rules-and-audit MCP server that Alexa+ calls for real. Alexa+ handles the conversation and intent. Our server decides what happens, confirms risky actions, logs everything, and supports concise mode and undo.
 
-**Voice:** ElevenLabs provides the spoken voice in the demo, so the demo sounds like the assistant. Alexa+ still drives every tool call. ElevenLabs only speaks the `speech` string that Alexa+ returns. If the ElevenLabs path fails on demo day, we play the Alexa+ response directly. Alexa+ is never bypassed.
+**Voice:** ElevenLabs provides the spoken voice, so the assistant sounds the same every time. Alexa+ still drives every tool call. ElevenLabs only speaks the `speech` string that Alexa+ returns. If the ElevenLabs path fails, we play the Alexa+ response directly. Alexa+ is never bypassed.
 
 **AWS constraint:** One AWS service, **App Runner**, hosts the public HTTPS MCP endpoint. Nothing else touches AWS.
 
@@ -21,7 +21,7 @@ graph LR
         Rules --> Audit[Hash-chained audit log]
         Rules --> Adapters[Simulated adapters: timer, lights, booking]
     end
-    AlexaPlus -->|speech string| Voice[ElevenLabs TTS - demo voice]
+    AlexaPlus -->|speech string| Voice[ElevenLabs TTS - voice]
     Voice --> User
     Console[React console: Trace and Audit] -->|REST /api| Server
 ```
@@ -116,7 +116,7 @@ Published as `STANDARD.md` in the repo:
 
 - **Backend (1):** MCP server, rules, tokens, audit, privacy, journeys.
 - **Frontend (1):** Trace and Audit console, voice proxy wiring.
-- **Integration and demo (1):** Alexa+ registration, App Runner deploy, ElevenLabs voice, demo script, `STANDARD.md`.
+- **Integration and walkthrough (1):** Alexa+ registration, App Runner deploy, ElevenLabs voice, walkthrough script, `STANDARD.md`.
 
 ---
 
@@ -171,7 +171,7 @@ Published as `STANDARD.md` in the repo:
 
 **Exit:** `audit verify` is green. Undo logged and linked. Third-party booking refused when toggled off.
 
-### Day 4: Console, voice, deploy, demo
+### Day 4: Console, voice, deploy, walkthrough
 
 **Build**
 
@@ -181,16 +181,16 @@ Published as `STANDARD.md` in the repo:
 - Journeys: three YAML journeys run from the terminal.
 - Deploy final build to App Runner from `main`.
 
-**Demo rehearsal**
+**Walkthrough rehearsal**
 
 - Run the three-minute script end to end on the live URL.
 - Have a fallback: if ElevenLabs fails, play Alexa+'s response directly.
 
-**Exit:** Three journeys pass. Console loads. Demo runs live.
+**Exit:** Three journeys pass. Console loads. Walkthrough runs live.
 
 ---
 
-## 10. Three-Minute Demo Script
+## 10. Three-Minute Walkthrough Script
 
 1. Say "set a ten-minute timer." Trace shows the call. Audit shows the entry.
 2. Say "dim the living room lights to 30 percent." Show the rule that validated it.
@@ -213,9 +213,9 @@ Published as `STANDARD.md` in the repo:
 - [ ] Privacy toggles enforced server-side.
 - [ ] Three journeys pass.
 - [ ] Console shows Trace and Audit.
-- [ ] ElevenLabs speaks Alexa+ responses in the demo.
+- [ ] ElevenLabs speaks Alexa+ responses in the walkthrough.
 - [ ] `STANDARD.md` published.
-- [ ] Demo runs on the live URL.
+- [ ] Walkthrough runs on the live URL.
 
 ---
 
@@ -233,9 +233,9 @@ Published as `STANDARD.md` in the repo:
 
 | Risk | Mitigation |
 |---|---|
-| Alexa+ access or registration delayed | Day 0 check. If blocked, use the Local Inspector and say so in the demo. |
+| Alexa+ access or registration delayed | Day 0 check. If blocked, use the Local Inspector and say so in the walkthrough. |
 | Round trip over 500 ms | No model calls in the server path; warm instance; adapter timeouts at 300 ms. |
-| ElevenLabs outage or cost | Fallback to Alexa+'s own audio. Cache demo phrases. |
+| ElevenLabs outage or cost | Fallback to Alexa+'s own audio. Cache common phrases. |
 | Audit log resets on redeploy | Seeded fixture with visible `seeded` marker; documented as a follow-up. |
 | Scope creep | Cut order enforced daily. |
 

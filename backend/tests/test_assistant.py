@@ -63,7 +63,7 @@ def _assistant() -> tuple[AppState, AssistantService]:
         ("tell me more", "tell_me_more", {}),
     ],
 )
-def test_parser_maps_demo_phrases(utterance: str, tool: str, params: dict) -> None:
+def test_parser_maps_example_phrases(utterance: str, tool: str, params: dict) -> None:
     result = parse(utterance, today=TODAY)
 
     assert isinstance(result, Intent)

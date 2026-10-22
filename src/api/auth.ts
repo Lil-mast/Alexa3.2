@@ -39,7 +39,7 @@ export interface AuthSession {
   expires_at: number;
   subject: string;
   user: AuthUser;
-  demo_notice: string;
+  house_notice: string;
 }
 
 export interface AuthMe {
@@ -48,7 +48,7 @@ export interface AuthMe {
   subject: string;
   user: AuthUser | null;
   session_expires_at: number | null;
-  demo_notice: string;
+  house_notice: string;
 }
 
 export class AuthApiError extends Error {

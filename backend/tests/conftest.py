@@ -13,7 +13,7 @@ from app.config import Settings
 from app.main import create_app
 
 TEST_TOKEN = "test-token"
-# One token with every demo scope. Scope-denial tests build a narrower principal
+# One token with every scope. Scope-denial tests build a narrower principal
 # directly instead of adding another token to the table.
 ALL_SCOPES = [
     "home:timers:write",

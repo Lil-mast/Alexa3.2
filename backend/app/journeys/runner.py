@@ -2,7 +2,7 @@
 
 The runner uses the same parser, router, rules, confirmation service, and audit
 log as the live server, but it never touches the live state. A journey run cannot
-set a timer in the demo, consume a real confirmation token, or add rows to the
+set a timer in the house, consume a real confirmation token, or add rows to the
 audit chain the operator is showing.
 
 The principal is synthetic and holds every scope the tools declare. A journey is

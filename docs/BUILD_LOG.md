@@ -136,9 +136,9 @@ lights_set {"room": "garage", "on": true}
   undo for timers, lights, climate, and bookings, `tell_me_more`, concise mode,
   and privacy toggles.
 - Day 4: React console (Trace and Audit), ElevenLabs voice proxy, journeys,
-  final deploy, and demo rehearsal.
+  final deploy, and rehearsal.
 - Persistence: SQLite or Postgres for audit, settings, and tokens. In-memory
-  device state is acceptable for the demo and documented as such.
+  device state is acceptable for now and documented as such.
 - Real device integrations remain out of scope. The adapter boundary is the
   integration point.
 
@@ -163,7 +163,7 @@ deployment are still blocked on external access.
 | Rules engine | `app/rules/engine.py`, `app/rules/__init__.py` | Loads and validates the YAML once, applies defaults, and returns structured violations |
 | Confirmation service | `app/confirm.py` | Single-use tokens bound to subject, tool, and canonical parameter hash; 300-second TTL |
 | Booking | `app/tools/booking.py`, `app/adapters/booking.py` | Medium-risk room booking with preview, confirm, replay refusal, and conflict detection |
-| Climate | `app/tools/thermostat.py`, `app/adapters/climate.py` | Low-risk thermostat setpoint, the demo's `OUT_OF_BOUNDS` example |
+| Climate | `app/tools/thermostat.py`, `app/adapters/climate.py` | Low-risk thermostat setpoint, the `OUT_OF_BOUNDS` example |
 | Router | `app/router.py` | Auth, scope, rules, preview/token, execute, consume, response, trace |
 | Contract | `app/models.py` | `preview`, `confirmation_token`, and the `no_change` handler decision |
 | Registry | `app/tools/__init__.py`, `app/main.py` | Four tools; `/api/tools` publishes the rules version, TTL, and per-field rules |
@@ -486,7 +486,7 @@ id is in the structured log line and in the trace.
 
 ### Seeded startup chain
 
-`app/audit_seed.json` holds three rows for `demo-user` with fixed timestamps: an
+`app/audit_seed.json` holds three rows for `house-user` with fixed timestamps: an
 executed timer, a refused thermostat, and a previewed booking. The hashes are
 computed at boot from the fixture, so two boots rebuild the same chain and the
 head is reproducible. Seeded rows carry no compensation, so they can never be the
@@ -559,7 +559,7 @@ the honest tradeoff: the chain still proves sequence and that nothing was
 inserted, but a tombstone no longer proves its own contents.
 
 Changes are audited because they go through the router like any other tool. The
-demo order matters: sharing defaults to on so step 6 can turn it off and show the
+order matters: sharing defaults to on so step 6 can turn it off and show the
 refusal.
 
 ### Decisions and gotchas
@@ -581,9 +581,9 @@ refusal.
   reads out of the undo candidates without a second decision vocabulary.
 - The audit row's `scopes_used` comes from the handler when it narrows them (undo
   reports the original row's scopes) and from the manifest otherwise.
-- `compensated_ids()` is recomputed from the log on every call. At demo scale
+- `compensated_ids()` is recomputed from the log on every call. At the current scale
   that is free; a table would index `compensator_of`.
-- Retention runs on change, not on a timer. A demo setting is enforced
+- Retention runs on change, not on a timer. A setting is enforced
   immediately and visibly, and there is no background task to trust.
 - Undo is not previewed. It only reverses an action the user already confirmed,
   and the alternative, a medium-risk `undo` that previews every light restore,
@@ -650,7 +650,7 @@ audit verify
 - No high-risk tool exists, so the certification gate is not implemented.
 - No separate privacy read grant yet.
 - Day 4: console Trace and Audit screens, voice proxy, YAML journeys, deploy, and
-  demo rehearsal.
+  rehearsal.
 
 ### Next step
 
@@ -691,7 +691,7 @@ headless Chrome         -> shell renders, health pill "8 tools · 3 rows"
 curl :5173/console/     -> 200
 curl :5173/health       -> backend JSON through the proxy
 curl :5173/api/trace    -> 401 without a token
-VITE_CONSOLE_TOKEN      -> identity row "signed in as demo-user"
+VITE_CONSOLE_TOKEN      -> identity row "signed in as house-user"
 ```
 
 ### Gotchas
@@ -725,7 +725,7 @@ state, then the Audit screen with the chain badge and the undo button.
 
 ### Delivered
 
-- `app/assistant/`: a deterministic parser for the demo phrases, a per-subject
+- `app/assistant/`: a deterministic parser for the example phrases, a per-subject
   pending confirmation store, a service that resolves yes/no before parsing a new
   request, and a typed `AssistantReply` envelope. The parser returns parameters
   only; `Router.execute` still validates, authorizes, confirms, audits, and
@@ -779,8 +779,8 @@ timer             passed  audit_ok  rows 5
 
 ### Decisions
 
-- The demo brain is a parser, not a model. Alexa+ owns intent in production. A
-  local stand-in keeps the demo deterministic and means the journeys can assert
+- The assistant is a parser, not a model. Alexa+ owns intent in production. A
+  local stand-in keeps the assistant deterministic and means the journeys can assert
   exact tool choices.
 - One pending confirmation per subject. A new request while a preview is open
   repeats the question instead of replacing it or guessing. This makes "yes" and
@@ -802,7 +802,7 @@ timer             passed  audit_ok  rows 5
 
 - The parser defaults an unnamed light room and thermostat zone to the living
   room so "turn on the lights" and "set the thermostat to 35" reach the rule
-  engine. The default is a demo convenience, not a rule.
+  engine. The default is a convenience, not a rule.
 - A bare clock hour from 1 to 6 is read as afternoon. "book at two" is 14:00.
   This is documented in `_assume_meridiem`.
 - Pending confirmations are in memory. A restart drops them and the token, which
@@ -817,10 +817,10 @@ timer             passed  audit_ok  rows 5
 - The four console screens and the assistant bar are next.
 - `src/api/types.ts` needs the new assistant, state, journey, and voice
   types before the screens can call them.
-- Set `ALEXA_ELEVENLABS_API_KEY` for the demo voice, or rely on browser speech.
+- Set `ALEXA_ELEVENLABS_API_KEY` for the voice, or rely on browser speech.
 - No per-token rate limit on voice yet. The bearer token is the control for the
-  demo.
-- App Runner deployment and demo rehearsal are still pending.
+  voice.
+- App Runner deployment and rehearsal are still pending.
 
 ### Next step
 
@@ -898,7 +898,7 @@ screens.
   maps them to `psycopg`. `sqlalchemy` and `psycopg[binary]` are in
   `pyproject.toml` and `requirements.txt`; `create_all` runs at startup.
 - `backend/.env.example` documents Google, database, frontend, session, exchange
-  code, dev login, and CORS settings. The account payload carries the demo
+  code, dev login, and CORS settings. The account payload carries the house
   notice: accounts persist, the simulated house resets after inactivity or a
   redeploy.
 
@@ -923,7 +923,7 @@ local-only dev login, and sessions surviving a new app against the same database
   CORS origins, so local secrets cannot change the suite.
 - Render free instances spin down. Accounts survive because they are in
   Postgres, but the in-memory house and audit chain reset. Use a paid instance or
-  a keep-alive ping on demo day.
+  a keep-alive ping before a walkthrough.
 - The Google Cloud client needs both callback URIs registered:
   `http://localhost:8000/api/auth/callback/google` and
   `https://alexa-api.onrender.com/api/auth/callback/google`.

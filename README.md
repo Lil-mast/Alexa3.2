@@ -13,7 +13,7 @@ Alexa separates those two concerns. The LLM handles ambiguity in language. Deter
 ## What it does
 
 > The build is in progress. The status section below says what runs today. The
-> deterministic demo assistant, the ElevenLabs voice proxy, the console REST API,
+> deterministic assistant, the ElevenLabs voice proxy, the console REST API,
 > and four YAML journeys are in the backend. The four console screens and the live
 > deployment are next. The paragraphs in this section describe the target
 > product, not the current binary.
@@ -115,7 +115,7 @@ uv run python -m app.cli audit verify
 Set `ALEXA_MCP_URL` and `ALEXA_TOKEN` to point at a deployed instance. A tool
 business error exits non-zero, so the command is usable in a script.
 
-## Demo script (three minutes, target for Day 4)
+## Walkthrough script (three minutes, target for Day 4)
 
 1. Ask Alexa+ to set a ten-minute timer. It runs immediately. Show the audit entry.
 2. Ask it to dim the living room lights to 30 percent. Show the rule that validated the value.
@@ -226,7 +226,7 @@ Hackathon build. Days 1 to 4 are complete: eight tools, versioned YAML rules,
 single-use confirmation tokens, a hash-chained audit log with a seeded startup
 fixture, `audit verify`, undo linked through the log, concise mode with
 `tell_me_more`, server-enforced privacy toggles, simulated adapters, a trace
-buffer, a deterministic demo assistant, an optional ElevenLabs voice proxy, the
+buffer, a deterministic assistant, an optional ElevenLabs voice proxy, the
 console REST surface, and four YAML journeys. Google sign-in, persistent accounts
 and sessions, single-use exchange codes, explicit CORS for Vercel, and Render
 Postgres are in the backend; the suite is at 207 tests. The frontend is at the

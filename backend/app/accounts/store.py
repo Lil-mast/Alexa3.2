@@ -44,6 +44,11 @@ SESSION_PREFIX = "sess_"
 EXCHANGE_PREFIX = "code_"
 STATE_PREFIX = "state_"
 
+# The local dev account. Its subject matches the shipped development token, so a
+# browser session and an MCP client see the same house and the same audit rows.
+DEV_SUBJECT = "house-user"
+DEV_DISPLAY_NAME = "House Owner"
+
 _METADATA = MetaData()
 
 _USERS = Table(
@@ -146,10 +151,10 @@ class AccountStore:
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        """Create the tables and carry the two demo schema changes forward.
+        """Create the tables and carry the two schema changes forward.
 
         `create_all` never alters an existing table. The first deployed version
-        of this demo lacked `last_seen_at` and bound exchange codes to a user
+        of this app lacked `last_seen_at` and bound exchange codes to a user
         instead of a session. Adding the column and recreating the short-lived
         code table is enough to keep an existing local or Render database
         usable; a real migration tool is still the next step before the schema
@@ -283,9 +288,9 @@ class AccountStore:
             if row is None:
                 result = connection.execute(
                     insert(_USERS).values(
-                        subject="demo-user",
+                        subject=DEV_SUBJECT,
                         email="dev@example.invalid",
-                        display_name="Demo User",
+                        display_name=DEV_DISPLAY_NAME,
                         email_verified=True,
                         provider="dev",
                         provider_account_id="dev-user",
@@ -296,7 +301,13 @@ class AccountStore:
                 user_id = int(result.inserted_primary_key[0])
             else:
                 user_id = int(row["id"])
-                connection.execute(update(_USERS).where(_USERS.c.id == user_id).values(last_login_at=now))
+                # Databases created before the rename still hold the old subject.
+                # Bringing the row forward keeps the dev token and the house in step.
+                connection.execute(
+                    update(_USERS)
+                    .where(_USERS.c.id == user_id)
+                    .values(subject=DEV_SUBJECT, display_name=DEV_DISPLAY_NAME, last_login_at=now)
+                )
             row = connection.execute(select(_USERS).where(_USERS.c.id == user_id)).mappings().one()
         return self._user_from_row(row)
 
@@ -562,7 +573,7 @@ class AccountStore:
         """Delete expired handshake rows before inserting a new one.
 
         Sessions are not deleted here: a revoked or expired session is a useful
-        audit fact, and the table is tiny for a demo. OAuth states and exchange
+        audit fact, and the table is tiny. OAuth states and exchange
         codes have no value after their short TTL, so they are safe to prune.
         """
         connection.execute(_OAUTH_STATES.delete().where(_OAUTH_STATES.c.expires_at < now))

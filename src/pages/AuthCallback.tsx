@@ -25,7 +25,7 @@ export default function AuthCallback() {
     const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
     const params = new URLSearchParams(query);
     const code = params.get("code") ?? "";
-    const next = params.get("next") ?? "/demo";
+    const next = params.get("next") ?? "/house";
 
     // Drop the code from the URL first. It is single use, and leaving it in
     // the address bar would let a screenshot or a shared link replay it.
@@ -45,7 +45,7 @@ export default function AuthCallback() {
       .exchange(code)
       .then((session) => {
         writeSessionToken(session.token);
-        const target = next.startsWith("/") ? next : "/demo";
+        const target = next.startsWith("/") ? next : "/house";
         window.location.hash = `#${target}`;
       })
       .catch((error: unknown) => {

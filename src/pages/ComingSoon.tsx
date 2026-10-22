@@ -7,17 +7,6 @@ interface PageCopy {
 }
 
 const COPY: Record<string, PageCopy> = {
-  demo: {
-    eyebrow: "Demo",
-    title: (
-      <>
-        The house is
-        <br />
-        <em>next.</em>
-      </>
-    ),
-    body: "The protected simulation comes next in the build order. Lights, climate, timers, bookings, confirmations, and undo will all run through the real rules engine.",
-  },
   account: {
     eyebrow: "Account",
     title: (

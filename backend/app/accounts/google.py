@@ -81,7 +81,7 @@ def _display_name(raw: object, *, email: str) -> str:
     # Collapse whitespace and cap the value at the column limit. React escapes
     # text, but the header should not be pushed out of shape by a 10 KB name.
     candidate = " ".join(candidate.split())
-    return (candidate or "Demo user")[:80]
+    return (candidate or "Alexa user")[:80]
 
 
 class GoogleOAuthClient:

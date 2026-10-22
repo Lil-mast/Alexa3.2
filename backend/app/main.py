@@ -68,7 +68,7 @@ def create_app(settings: Settings | None = None, google: GoogleIdentityClient | 
     # Fail at startup, not on the first voice request.
     RULES.check_tools(TOOLS)
     # Accounts and sessions are persistent. The house, audit, and trace below are
-    # not: a redeploy signs nobody out but resets the demo home.
+    # not: a redeploy signs nobody out but resets the house.
     accounts = AccountStore(settings.database_url)
     auth_service = AuthService(settings, accounts, google or GoogleOAuthClient(settings))
     verifier = build_session_verifier(build_verifier(settings), accounts, SCOPES)
@@ -76,7 +76,7 @@ def create_app(settings: Settings | None = None, google: GoogleIdentityClient | 
     # test app never shares timers or lights with the running server.
     state = AppState(settings=settings, trace=TraceBuffer(settings.trace_capacity))
     router = Router(state)
-    # The demo assistant is a client of the router, not a second execution path.
+    # The assistant is a client of the router, not a second execution path.
     # It owns the parser and the pending confirmation, and every action still
     # goes through Router.execute.
     assistant = AssistantService(router)

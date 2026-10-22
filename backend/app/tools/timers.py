@@ -39,7 +39,7 @@ def handle(params: dict, principal: Principal, state: AppState) -> HandlerResult
         label=params.get("label"),
     )
     # Speech is composed here, not by the model. The same inputs produce the
-    # same sentence, which is what makes the demo repeatable.
+    # same sentence, which is what makes it repeatable.
     spoken = f"Timer set for {human_duration(timer.duration_s)}."
     # Detail is the payload `tell_me_more` will return on Day 3. It carries the
     # stable id and the end time, not the adapter's internals.

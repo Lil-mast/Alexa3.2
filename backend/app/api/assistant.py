@@ -1,7 +1,7 @@
-"""Text-in assistant endpoints for the demo console.
+"""Text-in assistant endpoints for the house screen and the console.
 
-These endpoints are the demo stand-in for Alexa+'s conversation layer. The real
-product turns speech into tool calls inside Alexa+. For a local demo, the
+These endpoints are the local stand-in for Alexa+'s conversation layer. The real
+product turns speech into tool calls inside Alexa+. For local use, the
 deterministic parser does that job so the operator can type or dictate a phrase
 and watch the same router decide.
 

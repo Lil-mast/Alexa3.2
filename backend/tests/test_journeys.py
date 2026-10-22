@@ -1,8 +1,8 @@
 """Journey fixture and runner tests.
 
-A journey is the demo's executable claim: the same sentence, the same tool, the
+A journey is the executable claim: the same sentence, the same tool, the
 same status, and the expected audit decision. These tests run every fixture
-against an isolated app state, so a parser change cannot make the demo less
+against an isolated app state, so a parser change cannot make the assistant less
 honest without failing here.
 """
 

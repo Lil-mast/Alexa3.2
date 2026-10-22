@@ -16,7 +16,7 @@ Alexa MCP server (FastAPI, Python)                 ← Render (API + MCP)
      ├── Confirmation service (single-use tokens)
      ├── Audit log (append-only, hash-chained)
      ├── Privacy policy enforcer
-     └── Device / service adapters (simulated for the demo)
+     └── Device / service adapters (simulated)
      │
      ▼
 SQLite (dev) / Postgres (Render) for accounts and sessions
@@ -28,7 +28,7 @@ React console (Vite + TypeScript): trace viewer, audit browser, privacy panel, j
 
 **Division of responsibility.** The model never receives device credentials and never calls adapters directly. It produces a tool call with parameters. The router validates the call against the tool's schema, then the rules engine validates the values against declared bounds, and only then does an adapter run.
 
-**Hosting boundary.** Render hosts one API container for the REST surface, the MCP endpoint, and Google OAuth callbacks. Vercel serves the static console. Accounts and sessions use Render Postgres; every other piece of demo state stays in the container. App Runner remains an alternative host for the MCP container because the contract is only port 8000, TLS termination, and forwarded headers, but it is not the planned demo path.
+**Hosting boundary.** Render hosts one API container for the REST surface, the MCP endpoint, and Google OAuth callbacks. Vercel serves the static console. Accounts and sessions use Render Postgres; every other piece of state stays in the container. App Runner remains an alternative host for the MCP container because the contract is only port 8000, TLS termination, and forwarded headers, but it is not the planned path.
 
 ## 2. Latency budget
 
@@ -170,7 +170,7 @@ class PrivacySettings(BaseModel):
 ```
 
 - `personalization=False`: the server ignores the stored concise preference and keeps no per-action detail history.
-- `third_party_sharing=False`: tools with `external=True` in their manifest are refused with `PRIVACY_BLOCKED`. It defaults to on so the demo can turn it off and show the refusal.
+- `third_party_sharing=False`: tools with `external=True` in their manifest are refused with `PRIVACY_BLOCKED`. It defaults to on so a user can turn it off and see the refusal.
 - `microphone_mode` is declared in the server's privacy manifest so Alexa+ can surface it. The server does not control the microphone.
 - `concise_mode=True`: responses omit `detail` and set `detail_available`.
 
@@ -233,9 +233,9 @@ duplicates a rule, and it renders decisions rather than making them. It is an
 operator and developer tool, not the customer experience: customer-facing
 confirmations are rendered by Alexa+.
 
-### Demo assistant and voice
+### Assistant and voice
 
-The backend ships a deterministic parser for the demo phrases. It is a stand-in
+The backend ships a deterministic parser for the example phrases. It is a stand-in
 for Alexa+'s intent layer, not a replacement: it returns parameters to
 `Router.execute`, which validates, authorizes, confirms, audits, and traces them
 exactly as it does for an MCP call. A preview is held per subject so the next
@@ -260,7 +260,7 @@ the same `Principal`:
   and CLI path. They are capabilities with a subject, a scope set, and an
   optional expiry. A public deployment replaces the shipped `dev-token`.
 - **Google sessions** are opaque `sess_...` bearer tokens created after the
-  browser OAuth flow. They carry the account profile and the same demo scopes,
+  browser OAuth flow. They carry the account profile and the same scopes,
   and `Router.execute` cannot tell the two kinds apart.
 
 ### Identity and tables
@@ -336,10 +336,10 @@ unset, the callback derives from it.
 Accounts and sessions survive a Render redeploy. The simulated house, trace,
 audit chain, confirmation tokens, and journey results do not: they are in
 process memory by design (D12 and D29). The account page must show the exact
-`demo_notice` sentence: `Demo house resets after inactivity or redeploy. Your
+`house_notice` sentence: `Your house resets after inactivity or a redeploy. Your
 account and sign-in stay.`
 
-Tables are created with SQLAlchemy `create_all` at startup for the demo. A small
+Tables are created with SQLAlchemy `create_all` at startup. A small
 compatibility step adds `last_seen_at` to an older session table and recreates
 the short-lived exchange-code table when its old `user_id` column is present, so
 the first deployed database keeps working. Alembic is still the next step before
@@ -354,7 +354,7 @@ threadpool only for the session lookup.
 - Set the Google client id and secret, `ALEXA_OAUTH_REDIRECT_URI`,
   `ALEXA_FRONTEND_URL`, `ALEXA_PUBLIC_URL`, and `ALEXA_CORS_ORIGINS`.
 - Add the exact production callback URI to the Google Cloud OAuth client.
-- Use a paid instance or a keep-alive ping on demo day: a free instance spins
+- Use a paid instance or a keep-alive ping before a walkthrough: a free instance spins
   down, which clears the in-memory house and audit chain. Accounts and sessions
   still survive because they are in Postgres.
 
@@ -405,14 +405,14 @@ alexa/
 | 4 | Audit log with hash chain, undo for lights and timers | `audit verify` passes; undo logged and linked |
 | 5 | Privacy toggles enforced | Third-party tool refused when toggled off |
 | 6 | Journeys and runner, console screens | Four journeys pass through the API and CLI; console screens render them |
-| 7 | Demo polish, `STANDARD.md`, certification report for booking tool | Demo script runs end to end |
+| 7 | Polish, `STANDARD.md`, certification report for booking tool | Walkthrough script runs end to end |
 
 Cut order if time runs short: certification runner first (keep the checklist as a document), then the console's journey screen, then the booking tool. Never cut the rules engine, confirmations, or the audit log, because those are the principles the project is judged on.
 
 ## 13. Risks
 
-- **Latency on Alexa+ round trips.** Mitigation: no LLM in the request path, warm process, adapter timeouts. Measure with the Local Inspector before the demo.
+- **Latency on Alexa+ round trips.** Mitigation: no LLM in the request path, warm process, adapter timeouts. Measure with the Local Inspector before a walkthrough.
 - **Alexa+ registration details.** The public docs describe the add-on flow through the `alexa-ai` CLI. Confirm the exact registration steps for a self-hosted server in the track resources before building the deployment.
 - **Confirmation rendering is Alexa+'s.** Our preview object must be complete enough for Alexa+ to render. Validate the shape against the Alexa+ UX guidelines.
 - **Scope creep.** Mitigation: the cut order above.
-- **Device realism.** Adapters are simulated. Say so in the demo and show the adapter boundary as the integration point.ss
+- **Device realism.** Adapters are simulated. Say so in a walkthrough and show the adapter boundary as the integration point.ss

@@ -1,6 +1,6 @@
 """`thermostat_set`: deterministic climate control.
 
-Low risk and reversible, so it executes immediately. It is also the demo's
+Low risk and reversible, so it executes immediately. It is also the
 out-of-bounds example: the bounds (16 to 28 degrees Celsius) live in rules.yaml,
 not in this file.
 """

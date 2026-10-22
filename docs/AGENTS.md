@@ -112,7 +112,7 @@ uncommitted while a build day is in progress.
 - The console renders decisions; it never makes them. Any write it needs goes
   through `POST /api/call/{tool}`, which calls `Router.execute`, never a second
   path. `PUT /api/privacy` is the same rule for the privacy toggles.
-- The demo assistant is deterministic. The parser returns parameters only, never
+- The assistant is deterministic. The parser returns parameters only, never
   calls a model, and every action still goes through `Router.execute`. A
   clarification is not a tool call and writes no audit row.
 - A pending assistant confirmation is keyed by subject and holds the token in
@@ -163,7 +163,7 @@ Days 1 to 4 are complete. The eight tools (`timer_set`, `lights_set`,
 hash-chained audit log with a seeded startup fixture and `alexa audit verify`,
 undo linked through the log, concise mode, and server-enforced privacy settings.
 
-The Day 4 backend is in place: a deterministic demo assistant with per-subject
+The Day 4 backend is in place: a deterministic assistant with per-subject
 pending confirmations, an optional ElevenLabs voice proxy with a browser
 fallback, the console REST surface (`/api/config`, `/api/state`, `/api/privacy`,
 `/api/call/{tool}`, `/api/assistant/*`, `/api/voice/*`, `/api/journeys/*`), and
@@ -171,7 +171,7 @@ four YAML journeys with an isolated runner. Google sign-in is in the backend:
 persistent users and sessions, OAuth state and PKCE, single-use exchange codes,
 a session verifier that resolves to the same `Principal` as a static token,
 explicit CORS for Vercel, and SQLite locally or Render Postgres in production.
-The suite is 207 tests and includes parser, confirmation, privacy-gate, voice,
+The suite is 208 tests and includes parser, confirmation, privacy-gate, voice,
 journey, auth, CORS, and account persistence coverage.
 
 The React app is at the repository root with pnpm, React 19, TypeScript, Vite,
@@ -186,7 +186,7 @@ Known gaps: no Alexa+ registration, Local Inspector device run, or physical
 device test; no MCP authorization server for Alexa+ (browser Google sign-in is a
 separate flow); the console sign-in screens are not wired yet; the `/console`
 static mount and root-context Docker change are pending; no real device
-integrations; no license chosen. The demo voice is disabled until a key is set,
+integrations; no license chosen. The voice is disabled until a key is set,
 and the voice endpoint has no per-token rate limit; the bearer token is the
-control for the demo. Render free instances spin down, which resets the
+control for live use. Render free instances spin down, which resets the
 in-memory house and audit chain.

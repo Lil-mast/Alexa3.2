@@ -16,13 +16,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 AMAZON_ID = re.compile(r"^amzn1\.")
 
 DEV_TOKEN_JSON = (
-    '{"dev-token":{"subject":"demo-user","client_id":"alexa-demo",'
+    '{"dev-token":{"subject":"house-user","client_id":"alexa-house",'
     '"scopes":["home:timers:write","home:lights:write","home:climate:write",'
     '"booking:rooms:write","privacy:settings:write"]}}'
 )
 """Development-only token table.
 
-One token with every demo scope keeps the MCP Inspector usable on a fresh
+One token with every scope keeps the MCP Inspector usable on a fresh
 checkout. `ALEXA_TOKENS_JSON` replaces this before any deployment.
 """
 
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # even if the flag is accidentally set.
     auth_dev_login: bool = False
 
-    # A JSON string rather than a secret file keeps the demo to one env var.
+    # A JSON string rather than a secret file keeps configuration to one env var.
     # app.auth parses it into subject, client_id, scopes, and optional expiry.
     tokens_json: str = DEV_TOKEN_JSON
 
@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     # instant, so nothing reads this yet.
     adapter_timeout_ms: int = 300
 
-    # ElevenLabs is the demo voice. It is optional: without a key the console
+    # ElevenLabs is the voice provider. It is optional: without a key the console
     # falls back to the browser's own speech synthesis. The key is read from the
     # environment and never leaves the server, and the voice id is fixed here so
     # a client cannot ask the server to fetch an arbitrary voice.
@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     # A tool response is one short sentence. The cap protects the upstream call
     # from an accidental paste of a whole transcript.
     voice_max_chars: int = 600
-    # Server-composed phrases repeat during a demo. A small cache makes the
+    # Server-composed phrases repeat often. A small cache makes the
     # second playback instant and cuts upstream cost. It is keyed by exact text,
     # cleared on restart, and never contains a subject id.
     voice_cache_size: int = 32
@@ -177,7 +177,7 @@ class Settings(BaseSettings):
 def startup_warnings(settings: Settings) -> list[str]:
     """Configuration that is fine locally and dangerous on a public host.
 
-    These are warnings, not startup errors. A hackathon demo should still boot
+    These are warnings, not startup errors. A hackathon build should still boot
     with the shipped token; a deployer should see the warning in the first log
     lines and fix it before real users arrive.
     """

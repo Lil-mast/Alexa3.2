@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { ApiError, api, readToken, writeToken } from "./api/client";
 import type { Health, WhoAmI } from "./api/types";
 
-// The voice screen moved to the customer-facing demo. The console keeps the
+// The voice screen moved to the house screen. The console keeps the
 // operator views only.
 const SCREENS = ["trace", "audit", "privacy", "journeys"] as const;
 type Screen = (typeof SCREENS)[number];

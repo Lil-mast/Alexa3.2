@@ -20,7 +20,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.accounts.models import UserRecord
-from app.accounts.service import DEMO_NOTICE, AuthFlowError, AuthService
+from app.accounts.service import HOUSE_NOTICE, AuthFlowError, AuthService
 from app.auth import Principal
 from app.config import Settings
 
@@ -58,7 +58,7 @@ class ExchangeResponse(BaseModel):
     expires_at: int
     subject: str
     user: UserView
-    demo_notice: str
+    house_notice: str
 
 
 class MeResponse(BaseModel):
@@ -67,7 +67,7 @@ class MeResponse(BaseModel):
     subject: str
     user: UserView | None = None
     session_expires_at: int | None = None
-    demo_notice: str
+    house_notice: str
 
 
 class DisplayNameRequest(BaseModel):
@@ -182,7 +182,7 @@ def build_auth_router(settings: Settings, service: AuthService, require_principa
             expires_at=int(result.expires_at.timestamp()),
             subject=result.user.subject,
             user=_user_view(result.user),
-            demo_notice=DEMO_NOTICE,
+            house_notice=HOUSE_NOTICE,
         )
 
     @api.get("/me", response_model=MeResponse)
@@ -199,7 +199,7 @@ def build_auth_router(settings: Settings, service: AuthService, require_principa
             session_expires_at=(
                 int(principal.session_expires_at.timestamp()) if principal.session_expires_at else None
             ),
-            demo_notice=DEMO_NOTICE,
+            house_notice=HOUSE_NOTICE,
         )
 
     @api.patch("/me", response_model=UserView)
@@ -239,7 +239,7 @@ def build_auth_router(settings: Settings, service: AuthService, require_principa
             expires_at=int(result.expires_at.timestamp()),
             subject=result.user.subject,
             user=_user_view(result.user),
-            demo_notice=DEMO_NOTICE,
+            house_notice=HOUSE_NOTICE,
         )
 
     return api

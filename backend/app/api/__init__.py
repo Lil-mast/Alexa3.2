@@ -1,4 +1,4 @@
-"""HTTP routers for the console, the demo assistant, voice, and journeys.
+"""HTTP routers for the console, the assistant, voice, and journeys.
 
 Each builder receives its dependencies explicitly instead of importing a module
 global. Tests can build a fresh app with its own state and get fresh routers,

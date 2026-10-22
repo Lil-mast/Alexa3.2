@@ -4,6 +4,7 @@ import ConsoleApp from "./ConsoleApp";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import ComingSoon from "./pages/ComingSoon";
+import House from "./pages/House";
 import Landing from "./pages/Landing";
 
 type Route =
@@ -12,6 +13,7 @@ type Route =
   | { name: "signup" }
   | { name: "login" }
   | { name: "callback" }
+  | { name: "house" }
   | { name: "soon"; path: string };
 
 /**
@@ -28,7 +30,7 @@ function readRoute(): Route {
   }
 
   // The query lives inside the hash, for example
-  // `#/auth/callback?code=...&next=/demo`. The route is the path in front of it.
+  // `#/auth/callback?code=...&next=/house`. The route is the path in front of it.
   const raw = hash.replace(/^#\/?/, "");
   const path = raw.split("?")[0].replace(/\/+$/, "");
 
@@ -43,6 +45,8 @@ function readRoute(): Route {
       return { name: "login" };
     case "auth/callback":
       return { name: "callback" };
+    case "house":
+      return { name: "house" };
     default:
       // The console keeps its own sub-screens, for example #/console/audit.
       return path.startsWith("console/") ? { name: "console" } : { name: "soon", path };
@@ -55,6 +59,7 @@ const TITLES: Record<Route["name"], string> = {
   signup: "Sign up, Alexa 3.5",
   login: "Log in, Alexa 3.5",
   callback: "Signing you in, Alexa 3.5",
+  house: "Your house, Alexa 3.5",
   soon: "Alexa 3.5, next in the build",
 };
 
@@ -91,6 +96,8 @@ export default function App() {
       return <Auth mode="login" />;
     case "callback":
       return <AuthCallback />;
+    case "house":
+      return <House />;
     case "soon":
       return <ComingSoon path={route.path} />;
     default:

@@ -1,4 +1,4 @@
-"""Voice output for the demo. ElevenLabs is the only provider today."""
+"""Voice output. ElevenLabs is the only provider today."""
 
 from app.voice.elevenlabs import AudioClip, ElevenLabsVoice, VoiceUnavailable
 

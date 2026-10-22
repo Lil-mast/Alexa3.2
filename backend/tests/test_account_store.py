@@ -1,7 +1,7 @@
-"""Compatibility checks for the demo account schema.
+"""Compatibility checks for the account schema.
 
 `create_all` creates missing tables but never alters an existing one. The first
-version of the demo had no `last_seen_at` and bound exchange codes to a user.
+version of the app had no `last_seen_at` and bound exchange codes to a user.
 These tests pin the small startup migration that keeps an existing local or
 Render database usable until Alembic lands.
 """
@@ -13,7 +13,7 @@ import sqlite3
 from app.accounts.store import AccountStore
 
 
-def test_store_upgrades_the_first_demo_schema(tmp_path):
+def test_store_upgrades_the_first_schema(tmp_path):
     path = tmp_path / "old.db"
     with sqlite3.connect(path) as connection:
         connection.execute(
@@ -56,5 +56,26 @@ def test_store_upgrades_the_first_demo_schema(tmp_path):
         session = store.resolve_session(token)
         assert session is not None
         assert session.user.subject == user.subject
+    finally:
+        store.close()
+
+
+def test_dev_account_created_under_an_old_subject_moves_to_the_house_subject(tmp_path):
+    path = tmp_path / "dev.db"
+    store = AccountStore(f"sqlite:///{path}")
+    try:
+        first = store.find_or_create_dev_user()
+        assert first.subject == "house-user"
+
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "UPDATE auth_users SET subject = ?, display_name = ? WHERE id = ?",
+                ("legacy-subject", "Legacy Name", first.id),
+            )
+
+        again = store.find_or_create_dev_user()
+        assert again.id == first.id
+        assert again.subject == "house-user"
+        assert again.display_name == "House Owner"
     finally:
         store.close()

@@ -2,7 +2,7 @@
 
 The browser never sees the API key. It asks the backend to speak a `speech`
 string, and the backend either returns audio or a structured reason why it
-cannot. That keeps the demo voice replaceable: a different provider only has to
+cannot. That keeps the voice provider replaceable: a different provider only has to
 implement the same `synthesize` method.
 
 This module is not in the decision path. It does not choose tools, change state,
@@ -99,7 +99,7 @@ class ElevenLabsVoice:
         payload = {
             "text": text,
             "model_id": self._settings.elevenlabs_model_id,
-            # These values are a neutral, readable demo voice. They are not
+            # These values are a neutral, readable voice. They are not
             # per-user preferences, so there is no reason to expose them.
             "voice_settings": {
                 "stability": 0.4,
@@ -120,7 +120,7 @@ class ElevenLabsVoice:
             ) as client:
                 response = await client.post(url, json=payload, headers=headers)
         except httpx2.TimeoutException as exc:
-            # The demo should fall back quickly instead of making the operator
+            # Fall back quickly instead of making the operator
             # wait for a long upstream timeout.
             raise VoiceUnavailable("timeout") from exc
         except httpx2.HTTPError as exc:

@@ -1,9 +1,9 @@
-"""Deterministic utterance parser, the demo stand-in for Alexa+'s intent layer.
+"""Deterministic utterance parser, the local stand-in for Alexa+'s intent layer.
 
 This module is deliberately not a language model. It is a small, reviewable set of
-patterns that maps the demo's spoken phrases to the tool calls Alexa+ would make.
+patterns that map the spoken phrases to the tool calls Alexa+ would make.
 The real assistant still owns intent in production. This parser exists so the
-console, the journeys, and a local demo can drive the same router without a
+console, the journeys, and a local run can drive the same router without a
 model, a network call, or a second source of truth.
 
 Two rules keep it honest:
@@ -293,7 +293,7 @@ def parse_temperature(text: str) -> int | None:
 def _assume_meridiem(hour: int) -> int:
     """Choose a sensible half of the day for a bare hour.
 
-    A demo scheduling phrase such as "book at two" almost always means the
+    A scheduling phrase such as "book at two" almost always means the
     afternoon. Hours 1 to 6 become 13:00 to 18:00. Hours 7 to 11 stay morning.
     Noon and midnight stay as written. The rule is documented here because it is
     a product choice, not a language fact.
@@ -489,7 +489,7 @@ def _toggle_value(text: str) -> bool | None:
 def _families(text: str) -> set[str]:
     """Which tool families a sentence mentions.
 
-    More than one family means the sentence asks for two actions. The demo does
+    More than one family means the sentence asks for two actions. The assistant does
     one thing per turn, so the parser asks which one instead of silently
     dropping the second. This is the main guard against a plausible but wrong
     tool call.

@@ -1,6 +1,6 @@
 # A valid action, a rule refusal, and an undo.
 #
-# The thermostat at 35 is the demo's clearest rules moment. The refusal is still
+# The thermostat at 35 is the clearest rules moment. The refusal is still
 # an audit row, so the journey checks `refused`, not just the error code. Undo
 # then targets the last executed action, which is the light change, because the
 # refused setpoint never reached an adapter.

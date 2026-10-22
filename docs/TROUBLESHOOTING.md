@@ -174,7 +174,7 @@ update `pyproject.toml`, run `uv lock`, then regenerate.
 
 All device state, pending confirmations, privacy settings, detail memory, the
 trace, and the audit chain are in memory. A restart or a redeploy clears them.
-That is documented and safe for the demo: a pending confirmation becomes invalid
+That is documented and safe: a pending confirmation becomes invalid
 and the user is asked again.
 
 The audit log reseeds three fixed rows at boot from `app/audit_seed.json`, so

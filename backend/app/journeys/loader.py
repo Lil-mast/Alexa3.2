@@ -23,7 +23,7 @@ def load_journeys(directory: Path | None = None) -> list[Journey]:
 
     A malformed fixture is a startup-style configuration error, not a silent
     skip. The API turns the raised `RuntimeError` into a 500 with the reason, so
-    a broken journey is visible before a demo rather than during one.
+    a broken journey is visible before a run rather than during one.
     """
     root = directory or JOURNEYS_DIR
     if not root.is_dir():

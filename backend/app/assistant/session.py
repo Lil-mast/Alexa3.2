@@ -1,7 +1,7 @@
 """Per-subject pending confirmations for the assistant.
 
 A medium or high risk tool returns a preview and a single-use token. Alexa+ keeps
-that token in its own conversation state. The demo assistant keeps it here so the
+that token in its own conversation state. The assistant keeps it here so the
 next spoken "yes" can complete the same flow without the browser holding a
 capability it does not need.
 

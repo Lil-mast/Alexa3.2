@@ -111,17 +111,17 @@ def test_startup_seed_is_deterministic_and_verifies():
     assert first.verify().ok is True
 
 
-def test_seed_rows_belong_to_the_demo_user_and_are_not_undoable():
+def test_seed_rows_belong_to_the_house_user_and_are_not_undoable():
     log = AuditLog()
 
-    rows = log.rows_for("demo-user")
+    rows = log.rows_for("house-user")
 
     assert len(rows) == 3
     assert {row.decision for row in rows} == {"executed", "previewed", "refused"}
     assert all(row.compensation is None for row in rows)
     # Seeded history is evidence, not a reversible action: the newest executed
     # row is the seeded timer, and it carries no compensation.
-    latest = log.last_executed("demo-user")
+    latest = log.last_executed("house-user")
     assert latest is not None
     assert latest.tool == "timer_set"
     assert latest.compensation is None

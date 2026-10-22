@@ -82,7 +82,7 @@ export default function Landing() {
 
   const sessionNote = session.checking
     ? "Checking your session"
-    : session.destination === "demo"
+    : session.destination === "house"
       ? "Session verified, the house is unlocked"
       : "A valid session opens the house directly";
 
@@ -119,7 +119,7 @@ export default function Landing() {
               href={session.href}
               onClick={session.open}
             >
-              Try the demo
+              Try the house
               <Arrow size={15} />
             </a>
           </div>
@@ -156,7 +156,7 @@ export default function Landing() {
                   href={session.href}
                   onClick={session.open}
                 >
-                  {session.destination === "demo" ? "Open the live house" : "Start with the house"}
+                  {session.destination === "house" ? "Open the live house" : "Start with the house"}
                   <Arrow />
                 </a>
                 <a className="lp-text-link" href="#how">
@@ -170,7 +170,7 @@ export default function Landing() {
                   className={
                     session.checking
                       ? "lp-session-dot is-checking"
-                      : session.destination === "demo"
+                      : session.destination === "house"
                         ? "lp-session-dot is-valid"
                         : "lp-session-dot is-anonymous"
                   }
@@ -517,7 +517,7 @@ export default function Landing() {
               label="Proof"
               title={
                 <span id="proof-title">
-                  The demo is
+                  The house is
                   <br />
                   the <em>argument.</em>
                 </span>
@@ -784,7 +784,7 @@ export default function Landing() {
                 href={session.href}
                 onClick={session.open}
               >
-                {session.destination === "demo" ? "Open the live house" : "Start with the house"}
+                {session.destination === "house" ? "Open the live house" : "Start with the house"}
                 <Arrow />
               </a>
               <a className="lp-text-link lp-text-link-light" href="#/console">
@@ -792,7 +792,7 @@ export default function Landing() {
                 <Arrow size={16} />
               </a>
             </div>
-            <p className="lp-cta-note">{sessionNote}. Built for the Alexa+ developer demo.</p>
+            <p className="lp-cta-note">{sessionNote}. Built for Alexa+ developers.</p>
           </div>
         </section>
       </main>
@@ -822,7 +822,7 @@ export default function Landing() {
           </div>
 
           <div className="lp-footer-bottom">
-            <p>© 2026 Alexa 3.5 demo. Not affiliated with Amazon. Alexa+ is a trademark of Amazon.</p>
+            <p>© 2026 Alexa 3.5. Not affiliated with Amazon. Alexa+ is a trademark of Amazon.</p>
             <p>
               Warm paper, deterministic rules, no dark mode. <a href="#/console">Operator view ↗</a>
             </p>

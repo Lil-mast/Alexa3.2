@@ -123,7 +123,7 @@ export default function Auth({ mode }: { mode: AuthMode }) {
     setBusy(true);
     setError(null);
     const path = config?.login_url ?? "/api/auth/google/start";
-    const target = `${API_BASE}${path}?redirect_after=${encodeURIComponent("/demo")}`;
+    const target = `${API_BASE}${path}?redirect_after=${encodeURIComponent("/house")}`;
     window.location.href = target;
   };
 
@@ -204,13 +204,13 @@ export default function Auth({ mode }: { mode: AuthMode }) {
             ))}
           </ol>
           <p className="lp-auth-aside-note">
-            The demo house resets after inactivity or a redeploy. Your account and your sign-in stay.
+            Your house resets after inactivity or a redeploy. Your account and your sign-in stay.
           </p>
         </aside>
       </main>
 
       <footer className="lp-auth-footer">
-        <p>© 2026 Alexa 3.5 demo. Not affiliated with Amazon.</p>
+        <p>© 2026 Alexa 3.5. Not affiliated with Amazon.</p>
       </footer>
     </div>
   );

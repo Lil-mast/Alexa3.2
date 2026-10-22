@@ -4,7 +4,7 @@ The four privacy fields are the ones in BUILD_PLAN.md section 6. `concise_mode`
 is the presentation preference from section 5; it lives here because the server,
 not the client, decides whether a response carries `detail`.
 
-Settings are per subject and in memory for the demo. Changing them goes through
+Settings are per subject and in memory. Changing them goes through
 the `privacy_set` tool, so every change passes the router and writes an audit
 row. `personalization` is not decorative: when it is off, the concise preference
 falls back to its default and the server stops keeping action details for

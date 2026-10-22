@@ -20,9 +20,8 @@ class AppState:
 
     Adapters are simulated, so everything here is in memory and disappears on
     restart. On App Runner that means every redeploy starts with no timers, no
-    lights on, and no pending confirmations. BUILD_PLAN.md accepts this for the
-    demo; the audit log seeds a known chain at startup so the reset is visible
-    instead of silent.
+    lights on, and no pending confirmations. BUILD_PLAN.md accepts this; the audit
+    log seeds a known chain at startup so the reset is visible instead of silent.
 
     The audit log is the record. The trace buffer is a debugging view, and the
     detail memory exists only so `tell_me_more` can return what concise mode

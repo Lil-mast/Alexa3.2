@@ -45,14 +45,14 @@ mount is registered last.
 **Revisit if:** the SDK exposes a stable mount helper, or the redirect behavior
 is fixed and a nested mount becomes simpler.
 
-## D4. Resource server with a static token table for the demo
+## D4. Resource server with a static token table for local use
 
 **Decision:** The server verifies bearer tokens from `ALEXA_TOKENS_JSON` and
 publishes RFC 9728 protected-resource metadata. It does not run an OAuth 2.1
 authorization server.
 
 **Why:** The hackathon needs a working authenticated endpoint on day one. A
-static table keeps the demo to one environment variable and exercises the same
+static table keeps configuration to one environment variable and exercises the same
 401 challenge Alexa+ will see. The limitation is documented rather than hidden.
 
 **Revisit if:** Alexa+ registration requires an authorization-server metadata
@@ -84,7 +84,7 @@ Server-composed speech is testable, repeatable, and cannot claim success when th
 action failed. It also avoids a second model call, which keeps the turn well
 under a second.
 
-**Revisit if:** the product needs natural variation for a demo persona. Variation
+**Revisit if:** the product needs natural variation for a persona. Variation
 should be a small deterministic template choice, not a generative rewrite.
 
 ## D7. Business errors are structured tool results
@@ -156,12 +156,12 @@ missing arguments, not for authorizing a priced action with a durable token.
 multi-field question that cannot be represented as a tool call. Do not replace
 the token; add elicitation for the question and keep the token for execution.
 
-## D12. Adapters and state are in memory for the demo
+## D12. Adapters and state are in memory for now
 
 **Decision:** Timers, lights, climate, bookings, confirmation tokens, and the
 trace live in one `AppState` per process. A restart clears them.
 
-**Why:** Real integrations are out of scope and would slow the demo. The adapter
+**Why:** Real integrations are out of scope and would slow the build. The adapter
 boundary is small and explicit, so replacing a simulated adapter with a real one
 does not touch the router or the rules.
 
@@ -250,7 +250,7 @@ terminate TLS and add `X-Forwarded-*` headers. `ALEXA_PUBLIC_URL` is the HTTPS
 origin Alexa+ calls.
 
 **Why:** The build plan constrains public hosting to App Runner. The app does not
-need a load balancer, a custom domain, or a sidecar for the demo. The metadata
+need a load balancer, a custom domain, or a sidecar for now. The metadata
 URL and the 401 challenge are built from the configured origin, not from the
 request Host header.
 
@@ -260,7 +260,7 @@ the deployment needs multiple regions. The container contract stays the same.
 **Revised 2026-10-22:** the production API now runs on Render with Render
 Postgres, and the console runs on Vercel. App Runner remains a valid host for
 the MCP container because the contract is just port 8000, TLS termination, and
-forwarded headers, but it is no longer the planned demo path. See D37 and D38.
+forwarded headers, but it is no longer the planned path. See D37 and D38.
 
 ## D20. The local CLI calls MCP; it is not an Alexa+ simulator
 
@@ -272,7 +272,7 @@ product. The thing we need to verify is the server contract: the same initialize
 `tools/list`, and `tools/call` path Alexa+ uses. The CLI is a thin client over
 the official SDK.
 
-**Revisit if:** the demo needs a scripted conversation. Build it as a journey
+**Revisit if:** the product needs a scripted conversation. Build it as a journey
 runner with expected tool calls and outcomes, not as an unconstrained model.
 
 ## D21. Tool annotations come from the manifest
@@ -311,7 +311,7 @@ journeys, and certification.
 decision point. Building the safety layer before the audit exists would produce
 claims the code cannot support.
 
-**Revisit if:** the demo date moves. Do not ship a high-risk tool without the
+**Revisit if:** the launch date moves. Do not ship a high-risk tool without the
 audit and confirmation path, even if the UI is ready.
 
 ## D24. The project name is Alexa, and the house style has no em dashes
@@ -391,7 +391,7 @@ Undo only reverses an action the user already confirmed, so a second confirmatio
 would make every light restore a two-turn conversation. The authorization check
 still applies, and a booking cancellation is still gated by third-party sharing.
 
-**Revisit if:** a demo shows that undoing a booking needs its own confirmation.
+**Revisit if:** testing shows that undoing a booking needs its own confirmation.
 Then make `undo` risk depend on the target row and preview medium-risk targets
 only.
 
@@ -400,7 +400,7 @@ only.
 **Decision:** `privacy_set` with a new `retention_days` tombstones that subject's
 older rows in the same call. There is no background job.
 
-**Why:** The demo has no scheduler and no persistence, so a promised cleanup that
+**Why:** The house has no scheduler and no persistence, so a promised cleanup that
 never runs would be a false claim. A tombstone keeps the position, the hashes,
 the tool, and the decision, so the chain still verifies; it blanks the subject,
 the versions, the scopes, the parameter hash, and the compensation. The tradeoff
@@ -411,7 +411,7 @@ on-change call as an immediate guarantee.
 
 ## D30. The startup audit fixture is deterministic and not undoable
 
-**Decision:** `app/audit_seed.json` holds three fixed rows for `demo-user`. Their
+**Decision:** `app/audit_seed.json` holds three fixed rows for `house-user`. Their
 hashes are computed at boot, so the chain head is reproducible, and
 `/health` reports `audit_seeded`. Seeded rows carry no compensation.
 
@@ -439,11 +439,11 @@ add a `read` decision and bump the contract deliberately.
 ## D32. Third-party sharing defaults to on
 
 **Decision:** `third_party_sharing` defaults to on, so `book_room` works out of
-the box. The demo turns it off to show the refusal.
+the box. Turning it off shows the refusal.
 
-**Why:** Privacy-by-default would argue for off, but then the primary demo
+**Why:** Privacy-by-default would argue for off, but then the primary
 journey fails on a fresh install and the toggle has nothing to demonstrate. The
-tool is simulated and marked `external`, so the exposure during the demo is
+tool is simulated and marked `external`, so the exposure during use is
 nominal. A real deployment should revisit this with the privacy owner.
 
 **Revisit if:** the server connects to a real booking service. Then default to
@@ -513,7 +513,7 @@ so the image build moves to the repository root and adjusts its paths when the
 mount lands.
 
 **Why:** App Runner is the only public host (D19). A second service would double
-the deploy, the certificate, and the auth surface for a demo console. Serving
+the deploy, the certificate, and the auth surface for an operator console. Serving
 from the same origin removes CORS in production and keeps the bearer token on one
 origin. The conditional mount means a checkout without a frontend build still
 starts.
@@ -566,7 +566,7 @@ execution path.
 `auth_oauth_states`, `auth_exchange_codes`) live in SQLite locally and Render
 Postgres in production. The store uses SQLAlchemy 2.x Core and
 `psycopg[binary]`, normalizes Render's `postgres://` and `postgresql://` forms to
-`postgresql+psycopg://`, and runs `create_all` at startup for the demo. Only
+`postgresql+psycopg://`, and runs `create_all` at startup. Only
 hashes are stored for session tokens, OAuth states, and exchange codes. The auth
 routes are synchronous and run in FastAPI's threadpool; the rest of the app stays
 async. `DATABASE_URL` is the Render-provided variable, with a local file default.
@@ -578,12 +578,12 @@ CORS is unnecessary and would widen the surface.
 
 **Why:** Accounts and sessions are the only state that must survive a redeploy.
 Keeping the house, audit chain, trace, and confirmations in memory preserves the
-demo's visible reset behavior and avoids pretending a simulator is durable. A
+visible reset behavior and avoids pretending a simulator is durable. A
 small explicit store is easier to audit than an ORM graph and works unchanged on
 SQLite and Postgres. `create_all` is enough for a hackathon; migrations would add
 a step without protecting data that is already disposable.
 
 **Revisit if:** the schema changes after real users exist, or more than one
 process writes concurrently. Then add Alembic, a migration step before traffic,
-and a connection pool sized for the Render plan. The current demo recreates the
+and a connection pool sized for the Render plan. The current build recreates the
 account tables on a schema change.

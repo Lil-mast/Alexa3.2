@@ -1,6 +1,6 @@
 """Journey list and runner endpoints for the console's Journeys screen.
 
-Running a journey is a read of the contract, not a write to the demo. The runner
+Running a journey is a read of the contract, not a write to the house. The runner
 gets its own `AppState`, so this endpoint cannot change the live timer, light,
 booking, or audit state. That isolation is the reason the console can offer a
 "run" button without a confirmation step.

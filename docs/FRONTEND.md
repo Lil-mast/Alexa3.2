@@ -3,7 +3,7 @@
 The console is the operator view of the server: what Alexa+ called, what the rules
 decided, and whether the audit chain still holds. It is not the customer
 experience. Customers talk to Alexa+, and Alexa+ renders its own UI. This console
-is for the person running the demo, debugging a refusal, or showing the audit
+is for the person running the walkthrough, debugging a refusal, or showing the audit
 trail.
 
 Status: design agreed, scaffold installed and verified. `pnpm install`,
@@ -71,7 +71,7 @@ Two hosts are deliberate now. Vercel gives the console a static CDN and an
 independent release, while Render hosts the API, MCP endpoint, and Postgres. The
 browser is a bearer client, not a cookie client, so `allow_credentials=False` and
 the CORS allow list can stay narrow. The conditional `/console` mount remains in
-the backend image for single-origin demos; the root-context Docker change is
+the backend image for single-origin hosting; the root-context Docker change is
 still pending.
 
 
@@ -79,7 +79,7 @@ still pending.
 
 The browser account is a Google session, separate from the Alexa+ static bearer.
 The landing page asks `/api/whoami` whether the stored session is still valid;
-it goes to `#/demo` only after a 2xx answer, and to `#/signup` otherwise. Signup
+it goes to `#/house` only after a 2xx answer, and to `#/signup` otherwise. Signup
 navigates to the API start route and comes back to `/#/auth/callback`. The
 callback page removes the one-time code from the hash with
 `history.replaceState`, posts it to `/api/auth/exchange`, and stores the returned
@@ -101,7 +101,7 @@ sequenceDiagram
     A-->>B: 302 /#/auth/callback?code=...&next=...
     B->>A: POST /api/auth/exchange {code}
     A->>A: consume code, rotate session token
-    A-->>B: bearer token, account, demo notice
+    A-->>B: bearer token, account, house notice
 ```
 
 Failures return to `/#/login?error=<reason>`. The stable reasons are
@@ -110,8 +110,8 @@ Failures return to `/#/login?error=<reason>`. The stable reasons are
 and shows a sentence; it never renders a provider response or an exception.
 
 The account page shows the email, display name, provider, and sign-out action.
-It must also show the backend's `demo_notice` verbatim: `Demo house resets
-after inactivity or redeploy. Your account and sign-in stay.` The notice is on
+It must also show the backend's `house_notice` verbatim: `Your house resets
+after inactivity or a redeploy. Your account and sign-in stay.` The notice is on
 every auth response so the UI cannot drift from the backend.
 
 When the API is local and `ALEXA_AUTH_DEV_LOGIN=true`, the login page may offer
@@ -178,7 +178,7 @@ sequenceDiagram
 
 The console shows the preview and re-posts with the token. It does not decide
 whether the token is valid, and it does not write the audit entry. A refusal is a
-row too, so the audit chain explains the demo after the fact.
+row too, so the audit chain explains the action after the fact.
 
 The console stores the operator token in `sessionStorage` and never in a
 deployed build artifact. A 401 keeps the token bar on screen and prints the
@@ -269,7 +269,7 @@ poll, so a list that refreshes every five seconds does not move under the pointe
 
 The header is 56 px, sticky. The content column is capped at 1180 px and centered.
 Below 760 px the nav becomes a horizontal scroller and cards lose their side
-padding. The console is desktop-first because it is used beside a demo, but it
+padding. The console is desktop-first because it is used beside the house screen, but it
 must not break on a phone.
 
 ## 4. Component tree
@@ -299,6 +299,29 @@ component reads the URL except the hash route hook.
 
 ## 5. Screens
 
+### House
+
+The signed-in home at `#/house`. It is the customer-facing screen for talking to
+the assistant and watching the household respond. It reads `GET /api/state` every
+2.5 seconds while the tab is visible, and it sends each sentence to
+`POST /api/assistant/turn`. Yes and no buttons call `POST /api/assistant/confirm`
+and `POST /api/assistant/cancel`. Every change still goes through
+`Router.execute` on the server.
+
+- The floor plan draws the four controllable rooms from the server's lights and
+  thermostat values. A lit room glows in proportion to its brightness. A room
+  whose lights or setpoint changed gets a one-time highlight, whether the change
+  came from this screen or another client.
+- The Alexa orb shows the current phase: a slow breath when idle, ripples while
+  listening, a turning ring while the rules decide, and an equaliser while
+  speaking.
+- Replies play through `POST /api/voice/speak` when the server has a voice. A
+  refused or failed clip falls back to the browser's speech synthesis, so the
+  transcript and the audio never disagree.
+- Voice input uses the browser's speech recognition where it exists. Elsewhere
+  the microphone is disabled and the text box still works.
+- A signed-out visitor sees a sign-in prompt, not an empty house.
+
 ### Trace
 
 ```
@@ -323,7 +346,7 @@ Rules for this screen:
 - Render `speech`, not the raw parameters. The server does not send them.
 - Show latency from `ms`, and the audit id as a link into the Audit screen.
 - `refused` rewrites to the error code and the follow-up, because that is what a
-  demo audience needs to hear.
+  audience needs to hear.
 - Newest first. A new row is inserted at the top without moving the rows the
   operator is reading.
 - Pause stops polling and says so. Auto-scroll is not a feature.
@@ -373,7 +396,7 @@ on the Audit screen immediately. No REST shortcut writes settings directly.
 
 A list of YAML journeys, a run button, and one row per step with pass or fail.
 `GET /api/journeys` returns the list and `POST /api/journeys/{name}/run` runs one
-against an isolated app state, so the run cannot change the live demo. The CLI
+against an isolated app state, so the run cannot change the live house. The CLI
 path remains available for a terminal-only rehearsal.
 
 ## 6. API contract
@@ -535,11 +558,11 @@ should still start. In the Vercel path the browser never loads that mount.
       against the local backend, checked with a headless browser.
 - [x] Public landing page at `/`: warm editorial layout, Alexa+ comparison,
       problem, solution flow, proof, FAQ, and a session-aware CTA that goes to
-      `#/demo` only after the server validates the stored session.
+      `#/house` only after the server validates the stored session.
 - [x] Signup, login, and the `#/auth/callback` exchange. The callback removes
       the one-time code with `history.replaceState`, trades it for a session
       token, and stores the token in `sessionStorage`.
-- [ ] The protected house simulation at `#/demo`, with the voice screen that
+- [x] The protected house simulation at `#/house`, with the voice screen that
       used to sit in the console.
 - [ ] The protected account page at `#/account`.
 - [ ] Trace screen with filters, pause, and the empty state.
@@ -554,10 +577,10 @@ Each step keeps the rule that the console renders decisions and never makes them
 
 - No customer-facing UI. Alexa+ owns the conversation.
 - No Amazon logo, smile, or wordmark. Palette only.
-- No dark mode in the demo. The token structure allows it later.
+- No dark mode yet. The token structure allows it later.
 - No offline support, no service worker, no i18n.
 - No direct database access and no second copy of the rules.
-- No fake data in a demo path. If the server says empty, the screen says empty.
+- No fake data in any path. If the server says empty, the screen says empty.
 
 ## 11. Risks
 

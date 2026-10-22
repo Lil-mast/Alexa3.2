@@ -84,7 +84,7 @@ def build_state_router(state: AppState, assistant: AssistantService, require_pri
         now = datetime.now(UTC)
 
         # Expired timers are filtered here rather than by a background job. The
-        # demo has no scheduler, and a timer that has ended should disappear from
+        # The house has no scheduler, and a timer that has ended should disappear from
         # the operator view even if the adapter still holds its last row.
         timers = [
             TimerSnapshot(

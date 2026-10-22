@@ -1,4 +1,4 @@
-"""The demo assistant: parser, pending confirmation, router, reply.
+"""The assistant: parser, pending confirmation, router, reply.
 
 This service is the seam between a spoken sentence and the one execution path.
 It does four things and nothing else:
@@ -11,7 +11,7 @@ It does four things and nothing else:
 4. Keep the preview token for the next turn and return one reply shape.
 
 It never calls a model, never writes adapter state, and never composes speech for
-a tool. The handler composes its own speech, which keeps the demo repeatable and
+a tool. The handler composes its own speech, which keeps replies repeatable and
 keeps `tell_me_more` consistent with what was said.
 """
 

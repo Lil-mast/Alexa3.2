@@ -1,6 +1,6 @@
 """Speech helpers. `speech` is what Alexa+ says: one short sentence, always.
 
-English only for the demo. No SSML, because Alexa+ owns the rendering and the
+English only. No SSML, because Alexa+ owns the rendering and the
 ElevenLabs fallback reads plain text.
 """
 

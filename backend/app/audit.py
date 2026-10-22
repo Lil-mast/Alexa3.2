@@ -7,7 +7,7 @@ broken link by id.
 
 The chain is deliberately separate from the trace ring buffer. The trace drops
 old entries and is a debugging view; this log is the record. It lives in memory
-for the demo and is seeded from `audit_seed.json` at startup so a redeploy reads
+and is seeded from `audit_seed.json` at startup so a redeploy reads
 as an intentional reset rather than lost data (BUILD_PLAN.md section 4).
 
 What a row stores, and what it refuses to store:
@@ -123,7 +123,7 @@ def chain_hash(row: AuditRow, prev_hash: str) -> str:
 class AuditLog:
     """In-memory append-only chain with an injectable clock.
 
-    Unbounded on purpose for the demo: retention, not a ring buffer, decides how
+    Unbounded on purpose: retention, not a ring buffer, decides how
     long a row stays. A production store would be a table with the same columns
     and the same hash rule.
     """

@@ -3,7 +3,7 @@
 A journey is data, not code. It names the sentence, the tool the deterministic
 parser should choose, the status the router should return, and the audit decision
 that should follow. The runner compares all of them and fails on the first
-mismatch, which is what makes the demo's claims testable.
+mismatch, which is what makes these claims testable.
 
 `extra="forbid"` is deliberate. A typo such as `expected:` instead of `expect:`
 would otherwise leave a step with no assertions and pass silently.

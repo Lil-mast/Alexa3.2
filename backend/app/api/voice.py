@@ -1,4 +1,4 @@
-"""Voice output proxy for the demo.
+"""Voice output proxy.
 
 The browser sends the `speech` string it already received from a tool response.
 The server returns audio bytes, or a structured reason to use the browser's own

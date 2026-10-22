@@ -99,7 +99,7 @@ DOC_HOSTS = {
     "w3.org",
     "ietf.org",
     "unicode.org",
-    # Documented demo origins and a public provider API. These are not
+    # Documented app origins and a public provider API. These are not
     # secrets; the deployment and voice docs need the exact hosts.
     "alexa.vercel.app",
     "alexa-api.onrender.com",
@@ -369,7 +369,7 @@ def self_test() -> int:
         ("secret", 'password = "correct-horse-battery-staple"', True),
         ("secret", 'password = "short"', False),
         ("key", "-----BEGIN PRIVATE KEY-----", True),
-        ("token", 'ALEXA_TOKENS_JSON={"dev-token":{"subject":"demo-user"}}', False),
+        ("token", 'ALEXA_TOKENS_JSON={"dev-token":{"subject":"house-user"}}', False),
     ]
     failures = 0
     for name, text, expected in cases:

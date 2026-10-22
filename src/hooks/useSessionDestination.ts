@@ -7,7 +7,7 @@ import {
   readSessionToken,
 } from "../auth/session";
 
-export type SessionDestination = "demo" | "signup";
+export type SessionDestination = "house" | "signup";
 
 export interface SessionRoute {
   /** Where the next plain click should go. */
@@ -15,13 +15,13 @@ export interface SessionRoute {
   href: string;
   /** True while the stored token is being checked on first paint. */
   checking: boolean;
-  /** Navigate after a fresh check, so a stale token never opens the demo. */
+  /** Navigate after a fresh check, so a stale token never opens the house. */
   open: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
 /**
  * The landing page has one rule for its primary CTA: a valid session goes to
- * the demo, everything else goes to signup. The check runs on mount to label
+ * the house, everything else goes to signup. The check runs on mount to label
  * the link, and again on click because a token can expire while a tab is open.
  */
 export function useSessionDestination(): SessionRoute {
@@ -44,7 +44,7 @@ export function useSessionDestination(): SessionRoute {
       if (result === "invalid") {
         clearSessionToken();
       }
-      setDestination(result === "valid" ? "demo" : "signup");
+      setDestination(result === "valid" ? "house" : "signup");
       setChecking(false);
     });
 
@@ -77,8 +77,8 @@ export function useSessionDestination(): SessionRoute {
       if (result === "invalid") {
         clearSessionToken();
       }
-      const next = result === "valid" ? "#/demo" : "#/signup";
-      setDestination(result === "valid" ? "demo" : "signup");
+      const next = result === "valid" ? "#/house" : "#/signup";
+      setDestination(result === "valid" ? "house" : "signup");
       setChecking(false);
       window.location.hash = next;
     });
@@ -86,7 +86,7 @@ export function useSessionDestination(): SessionRoute {
 
   return {
     destination,
-    href: destination === "demo" ? "#/demo" : "#/signup",
+    href: destination === "house" ? "#/house" : "#/signup",
     checking,
     open,
   };

@@ -367,7 +367,7 @@ def test_redirect_after_cannot_leave_the_frontend():
             location = _callback(client, query["state"][0])
             fragment = urlparse(location).fragment
             params = parse_qs(fragment.split("?", 1)[1])
-            assert params["next"] == ["/demo"]
+            assert params["next"] == ["/house"]
 
 
 def test_two_google_accounts_are_isolated():

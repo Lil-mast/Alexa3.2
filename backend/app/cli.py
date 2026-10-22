@@ -1,4 +1,4 @@
-"""Local MCP client for manual checks and the demo.
+"""Local MCP client for manual checks.
 
 This is a developer tool, not an Alexa+ simulator. It does not choose tools or
 write speech; it sends exactly the call you type and prints the structured
@@ -137,7 +137,7 @@ async def _audit_verify(url: str, token: str) -> int:
     """Walk the server's hash chain and report the first broken link.
 
     The check runs on the server: the chain is global, and the CLI only needs the
-    verdict. Exit 1 on a broken chain so a demo script or CI can gate on it.
+    verdict. Exit 1 on a broken chain so a script or CI can gate on it.
     """
     async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
         response = await client.get(f"{_api_base(url)}/api/audit/verify")
