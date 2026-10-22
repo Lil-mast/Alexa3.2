@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Amazon user and skill identifiers. A token subject must be a pseudonym, not
@@ -117,6 +117,17 @@ class Settings(BaseSettings):
             raise ValueError("TTL values must be positive")
         return value
 
+    @model_validator(mode="after")
+    def _refuse_public_dev_token(self) -> Settings:
+        # The development token is in the repository, so anyone can call a public
+        # server with it. Refusing to boot is safer than a warning nobody reads.
+        if not self.is_local and self.uses_dev_token:
+            raise ValueError(
+                "ALEXA_TOKENS_JSON still has the public development token. "
+                "Set a private token before serving a non-local ALEXA_PUBLIC_URL."
+            )
+        return self
+
     @field_validator("database_url")
     @classmethod
     def _non_empty_database(cls, value: str) -> str:
@@ -201,10 +212,6 @@ def startup_warnings(settings: Settings) -> list[str]:
     if settings.is_local:
         return warnings
 
-    if settings.uses_dev_token:
-        warnings.append(
-            "ALEXA_TOKENS_JSON still contains the development token. Replace it before exposing the server."
-        )
     if "*" in settings.allowed_host_list:
         warnings.append("ALEXA_ALLOWED_HOSTS disables DNS-rebinding protection. Set the public hostname instead.")
     if not settings.public_url.lower().startswith("https://"):

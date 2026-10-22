@@ -139,6 +139,8 @@ migration (owned by Alexa+).
 The server is an MCP resource server. Registration needs a public HTTPS origin
 and a bearer token.
 
+The step-by-step deployment for Render and Vercel is in `docs/DEPLOY.md`.
+
 1. Deploy the API container to Render. Set `ALEXA_PUBLIC_URL` to the API
    origin, for example `https://alexa-api.onrender.com`, and set
    `ALEXA_ALLOWED_HOSTS` to the hostname without the scheme. The console is a

@@ -1,0 +1,58 @@
+# Render blueprint for the Alexa API. Create it from the dashboard with
+# "New > Blueprint" and point it at this repository. See docs/DEPLOY.md.
+#
+# Values marked `sync: false` are entered in the Render dashboard, never here.
+# Nothing in this file is a secret, a real hostname, or an account id.
+
+databases:
+  - name: alexa-db
+    databaseName: alexa
+    user: alexa
+    plan: free
+
+services:
+  - type: web
+    name: alexa-api
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      # The Dockerfile listens on 8000. Render routes to whatever PORT says.
+      - key: PORT
+        value: "8000"
+      - key: ALEXA_LOG_LEVEL
+        value: INFO
+      # Render's internal connection string. The app rewrites postgres:// to
+      # the psycopg driver itself, so the value is used as provided.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alexa-db
+          property: connectionString
+      # Public origins. Set these to the Render and Vercel URLs after the first
+      # deploy, then redeploy. ALEXA_ALLOWED_HOSTS is the API hostname without
+      # "https://" and turns the DNS-rebinding guard back on.
+      - key: ALEXA_PUBLIC_URL
+        sync: false
+      - key: ALEXA_ALLOWED_HOSTS
+        sync: false
+      - key: ALEXA_CORS_ORIGINS
+        sync: false
+      - key: ALEXA_FRONTEND_URL
+        sync: false
+      - key: ALEXA_OAUTH_REDIRECT_URI
+        sync: false
+      # Bearer tokens for MCP clients, as a JSON object. Replace the shipped
+      # development token before the first public deploy. See docs/DEPLOY.md.
+      - key: ALEXA_TOKENS_JSON
+        sync: false
+      # Google sign-in. Without both values the sign-in button is disabled.
+      - key: ALEXA_GOOGLE_CLIENT_ID
+        sync: false
+      - key: ALEXA_GOOGLE_CLIENT_SECRET
+        sync: false
+      # Optional. Without a key the house uses the browser's own voice.
+      - key: ALEXA_ELEVENLABS_API_KEY
+        sync: false

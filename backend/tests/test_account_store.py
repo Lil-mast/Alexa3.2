@@ -79,3 +79,20 @@ def test_dev_account_created_under_an_old_subject_moves_to_the_house_subject(tmp
         assert again.display_name == "House Owner"
     finally:
         store.close()
+
+
+def test_render_postgres_urls_are_mapped_to_the_psycopg_driver():
+    from sqlalchemy import create_engine
+
+    from app.accounts.store import normalize_database_url
+
+    assert normalize_database_url("postgres://u:p@db.internal/alexa") == "postgresql+psycopg://u:p@db.internal/alexa"
+    assert normalize_database_url("postgresql://u:p@db.internal/alexa") == "postgresql+psycopg://u:p@db.internal/alexa"
+    assert normalize_database_url("sqlite:///./data/alexa.db") == "sqlite:///./data/alexa.db"
+
+    # create_engine does not connect, so this checks the driver without a database.
+    engine = create_engine(normalize_database_url("postgres://u:p@localhost/alexa"))
+    try:
+        assert engine.dialect.driver == "psycopg"
+    finally:
+        engine.dispose()
