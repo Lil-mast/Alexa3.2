@@ -212,9 +212,9 @@ The certification runner produces a report; the server reads a `certified: true`
 
 ## 9. Frontend console
 
-React + TypeScript at `frontend/`, built by Vite, installed with pnpm, served by
-the backend at `/console`. The scaffold is in place; the screens are next. Four
-screens:
+React + TypeScript at the repository root (`src/`, `index.html`,
+`vite.config.ts`), built by Vite, installed with pnpm, served by the backend at
+`/console`. The scaffold is in place; the screens are next. Four screens:
 
 - **Trace:** live list of tool calls with service, decision, latency, and audit id.
 - **Audit:** searchable log with chain status and an "undo" action where a compensator exists.
@@ -255,8 +255,16 @@ specs, the API contract, accessibility, testing, and the build plan.
 ```
 alexa/
 ├── README.md
-├── TECHNICAL.md
-├── STANDARD.md
+├── index.html                # Vite entry
+├── package.json
+├── pnpm-workspace.yaml       # pnpm settings: build approvals, overrides
+├── tsconfig.json
+├── vite.config.ts
+├── src/                      # screens, typed API client, theme tokens
+├── docs/
+│   ├── FRONTEND.md
+│   ├── TECHNICAL.md
+│   └── ...
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           # FastAPI app, mounts /mcp and the /api routers
@@ -274,12 +282,8 @@ alexa/
 │   │   └── tools/            # ToolSpec manifests
 │   ├── tests/                # unit, HTTP, voice, journey, live MCP tests
 │   └── requirements.txt
-├── frontend/
-│   ├── src/                  # screens, typed API client, theme tokens
-│   ├── pnpm-workspace.yaml   # pnpm settings: build approvals, overrides
-│   └── package.json
-└── certification/
-    └── run_certification.py
+└── scripts/
+    └── check_leaks.py
 ```
 
 ## 11. Build plan (hackathon)

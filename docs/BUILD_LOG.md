@@ -660,6 +660,9 @@ same tool. Then the ElevenLabs proxy and the YAML journeys, then App Runner.
 
 ## 2026-10-22: Day 4 setup, console scaffold
 
+The paths below are the layout at the time. The console moved from `frontend/`
+to the repository root later the same day; see the final entry.
+
 ### Delivered
 
 - `FRONTEND.md`: console purpose, stack decisions, Amazon theme tokens with
@@ -812,7 +815,7 @@ timer             passed  audit_ok  rows 5
 ### Open items
 
 - The four console screens and the assistant bar are next.
-- `frontend/src/api/types.ts` needs the new assistant, state, journey, and voice
+- `src/api/types.ts` needs the new assistant, state, journey, and voice
   types before the screens can call them.
 - Set `ALEXA_ELEVENLABS_API_KEY` for the demo voice, or rely on browser speech.
 - No per-token rate limit on voice yet. The bearer token is the control for the
@@ -824,3 +827,42 @@ timer             passed  audit_ok  rows 5
 Build the Trace and Audit screens against the existing read endpoints, then add
 the assistant bar against `/api/assistant/turn` and the privacy and journey
 screens against the new routes.
+
+## 2026-10-22: Console moved to the repository root
+
+### Delivered
+
+- `index.html`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`,
+  `tsconfig.json`, `vite.config.ts`, `src/`, and `.env.example` now sit at the
+  repository root. The `frontend/` directory is gone.
+- `vite.config.ts` ignores `backend/`, `docs/`, `scripts/`, and `.git/` in the
+  watcher, because Vite's root is now the whole checkout.
+- Root `.gitignore` covers `dist/`, `node_modules/`, and `*.tsbuildinfo`.
+- `docs/FRONTEND.md` uses Mermaid for the runtime, read, write, and component
+  diagrams.
+
+### Verification
+
+```text
+pnpm install --offline  -> lockfile reused, 69 packages
+pnpm typecheck          -> clean
+pnpm build              -> dist 198.74 kB JS, 62.84 kB gzip
+curl :5173/console/     -> 200
+curl :5173/health       -> backend JSON through the proxy
+curl :5173/api/trace    -> 401 without a token
+headless Chrome         -> shell renders, health pill "8 tools · 3 rows"
+```
+
+### Gotchas
+
+- Running Vite from the repository root means the dev server sees the Python
+  tree, so the watcher ignores it explicitly. Without that, a backend edit can
+  trigger a reload.
+- The image build still uses `backend/` as its context. Serving `dist/` from the
+  image needs the build to move to the repository root and the Dockerfile paths
+  to change; that is still open.
+
+### Next step
+
+Trace and Audit screens, then the assistant bar and the privacy and journey
+screens.

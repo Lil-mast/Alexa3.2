@@ -444,18 +444,24 @@ nominal. A real deployment should revisit this with the privacy owner.
 **Revisit if:** the server connects to a real booking service. Then default to
 off and make enabling it an explicit, audited user action.
 
-## D33. The console is a separate root package with no router or UI kit
+## D33. The console is the root package with no router or UI kit
 
-**Decision:** The console lives in `frontend/` at the repository root. It is
-React 19 and TypeScript, built by Vite, installed with pnpm. Navigation is a
-20-line hash route hook, and styling is CSS custom properties plus plain CSS. No
-router dependency and no component library.
+**Decision:** The console lives at the repository root: `index.html`, `src/`,
+`package.json`, `tsconfig.json`, and `vite.config.ts` sit beside `backend/` and
+`docs/`. It is React 19 and TypeScript, built by Vite, installed with pnpm.
+Navigation is a 20-line hash route hook, and styling is CSS custom properties
+plus plain CSS. No router dependency and no component library.
 
-**Why:** The backend stays a pure Python package, and the console stays a pure
-frontend package, so neither build owns the other. Four flat screens do not need
-nested layouts or server-side routes, and a UI kit would fight a theme that is
-already 40 tokens. Hash routing keeps deep links working when the bundle is
-served from a subpath, with no server rewrite rule.
+**Why:** Vite's root is the repository root, so the console has no nested package
+and one `pnpm install` serves the checkout. The backend stays a pure Python
+package under `backend/`, so neither build owns the other. Four flat screens do
+not need nested layouts or server-side routes, and a UI kit would fight a theme
+that is already about 30 tokens. Hash routing keeps deep links working when the
+bundle is served from a subpath, with no server rewrite rule.
+
+**Revised 2026-10-22:** the scaffold first lived in `frontend/` and was moved to
+the root at the user's request. The package manager, lockfile, and Vite base did
+not change; only the paths did.
 
 **Revisit if:** the console grows past roughly six screens, needs guarded routes
 or server-side rendering. Then add a router deliberately and keep the theme
@@ -495,9 +501,11 @@ second named endpoint, not a wider version of this one.
 
 ## D36. The console ships inside the backend image at `/console`
 
-**Decision:** FastAPI serves `frontend/dist` at `/console` with `StaticFiles`,
-mounted before the catch-all MCP mount and only when the directory exists. The
-Dockerfile copies the build into the image.
+**Decision:** FastAPI serves `dist/` at `/console` with `StaticFiles`, mounted
+before the catch-all MCP mount and only when the directory exists. The Dockerfile
+copies the build into the image. The build output lives at the repository root,
+so the image build moves to the repository root and adjusts its paths when the
+mount lands.
 
 **Why:** App Runner is the only public host (D19). A second service would double
 the deploy, the certificate, and the auth surface for a demo console. Serving

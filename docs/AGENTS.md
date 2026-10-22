@@ -38,10 +38,9 @@ uv run pytest -q
 python3 ../scripts/check_leaks.py --self-test
 ```
 
-Console (React, pnpm, at the repository root):
+Console (React, pnpm, from the repository root):
 
 ```bash
-cd frontend
 pnpm install
 pnpm dev       # http://localhost:5173/console/, proxies /api to port 8000
 pnpm typecheck
@@ -49,7 +48,7 @@ pnpm build
 ```
 
 The console scaffold is in place; the four screens are Day 4 work. See
-`FRONTEND.md`.
+`docs/FRONTEND.md`.
 
 Enable the pre-commit leak scan once per clone:
 
@@ -82,7 +81,7 @@ uncommitted while a build day is in progress.
 | `backend/app/auth.py` | Static bearer verifier, scopes, 401 challenge, REST dependency |
 | `backend/app/models.py` | Wire contract and error taxonomy |
 | `backend/tests/` | Unit, HTTP, voice, journey, and live uvicorn MCP tests |
-| `frontend/` | React operator console: theme tokens, typed API client, screens. Settings in `pnpm-workspace.yaml`, design in `FRONTEND.md` |
+| Repository root (`src/`, `package.json`, `vite.config.ts`) | React operator console: theme tokens, typed API client, screens. Settings in `pnpm-workspace.yaml`, design in `docs/FRONTEND.md` |
 
 ## Invariants
 
@@ -162,8 +161,8 @@ YAML rules, confirmation tokens, a hash-chained audit log with a seeded startup
 fixture and `alexa audit verify`, undo linked through the log, concise mode, and
 server-enforced privacy settings. Day 1 to Day 3 details are in `BUILD_LOG.md`.
 
-Day 4 has started: the React console scaffold is installed at `frontend/` with
-pnpm, React 19, TypeScript, Vite, Amazon theme tokens, a typed client for
+Day 4 has started: the React console scaffold is installed at the repository root
+with pnpm, React 19, TypeScript, Vite, Amazon theme tokens, a typed client for
 `/health`, `/api/whoami`, `/api/tools`, `/api/trace`, `/api/audit`, and
 `/api/audit/verify`, plus a token bar. `pnpm typecheck` and `pnpm build` pass.
 
@@ -176,7 +175,7 @@ browser fallback, the console REST surface (`/api/config`, `/api/state`,
 coverage. The four console screens are next.
 
 Day 4 next: React console screens (Trace, Audit, Privacy, Journeys) plus the
-assistant bar, the matching TypeScript types in `frontend/src/api/types.ts`,
+assistant bar, the matching TypeScript types in `src/api/types.ts`,
 `ALEXA_ELEVENLABS_API_KEY` for the demo voice, App Runner deploy, and demo
 rehearsal.
 

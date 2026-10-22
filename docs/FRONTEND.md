@@ -8,16 +8,16 @@ trail.
 
 Status: design agreed, scaffold installed and verified. `pnpm install`,
 `pnpm typecheck`, and `pnpm build` pass, and a headless browser renders the
-shell against a live backend. The four screens are the next step. See
-`frontend/` and the build plan at the end of this document.
+shell against a live backend. The four screens are the next step. See the
+build plan at the end of this document.
 
 ## 1. Decisions
 
 | Area | Choice | Why |
 |---|---|---|
-| Location | `frontend/` at the repository root | Sibling to `backend/`, so neither package owns the other and one `git clone` gets both |
+| Location | Repository root: `index.html`, `src/`, `package.json` | Vite's root is the repository root, so the console has no nested package and one install serves the whole checkout |
 | Package manager | pnpm | Lockfile is exact, installs are hard-linked, and the workspace stays small |
-| pnpm settings | `frontend/pnpm-workspace.yaml` | pnpm 12 no longer reads build policy from `package.json`. Build approvals and overrides live in the workspace file, even for a single package |
+| pnpm settings | `pnpm-workspace.yaml` | pnpm 12 no longer reads build policy from `package.json`. Build approvals and overrides live in the workspace file, even for a single package |
 | Framework | React 19 + TypeScript, built by Vite | Vite is the least opinionated way to get a typed SPA with a fast dev loop |
 | Routing | Hash routing, about 20 lines, no router dependency | Four screens, no nested layouts, no server-side routes. A router would add a dependency and a second source of truth for navigation |
 | Data | `fetch` plus a small polling hook | The API is read-heavy and returns newest-first lists. A query library would be reasonable later, not on day one |
@@ -34,60 +34,101 @@ Development has two processes. The browser only ever talks to port 5173, and Vit
 forwards `/api` and `/health` to uvicorn on 8000. That keeps the browser origin
 constant and means no CORS preflight during development.
 
-```
-Development                                Production (App Runner, one image)
-───────────                                ─────────────────────────────────
-browser :5173                              browser
-   │  GET /api/trace                         │  GET /console/            static
-   │  (same origin)                         │  GET /api/audit           JSON
-   ▼                                        ▼
-Vite dev server ──proxy──► uvicorn :8000   FastAPI
-                              │             ├── /console   StaticFiles(frontend/dist)
-                              │             ├── /api       REST console API
-                              │             ├── /health    open
-                              │             └── /mcp       MCP for Alexa+
-                              ▼
-                        Router.execute
+### Where it runs
+
+The console is a Vite app at the repository root. In development, the browser
+loads `/console/` from Vite and every API call is proxied to uvicorn. In
+production, the built files and the API come from the same FastAPI process, so
+the browser sees one origin and no CORS.
+
+```mermaid
+flowchart LR
+    subgraph dev["Development"]
+        browserDev["Browser<br/>localhost:5173"]
+        vite["Vite dev server<br/>base /console/"]
+        apiDev["uvicorn<br/>localhost:8000"]
+        browserDev -->|"GET /console/"| vite
+        vite -->|"proxy /api and /health"| apiDev
+    end
+
+    subgraph prod["Production: App Runner"]
+        browserProd["Browser"]
+        apiProd["FastAPI<br/>/console, /api, /health, /mcp"]
+        browserProd -->|"HTTPS, same origin"| apiProd
+    end
+
+    apiDev --> router["Router.execute"]
+    apiProd --> router
 ```
 
 One image is deliberate. App Runner is the only public host (D19), so the console
 ships inside the backend image rather than on a second service. Two hosting
 targets would double the deploy, the TLS, and the auth surface for a demo console.
+The image plan assumes the build switches to the repository root when the static
+mount lands; today CI builds from `backend/`, which is why the mount is still
+pending.
 
-### Runtime data flow
+### Reads
 
+The screens only read. A read goes straight to the console API with the bearer
+token, and the response is the server's own view of state: no decision is
+recomputed in the browser.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant F as FastAPI
+    participant S as Trace and audit state
+
+    B->>F: GET /api/audit?limit=50 with Bearer token
+    F->>F: require_principal verifies the token
+    alt token accepted
+        F->>S: snapshot filtered to this subject
+        S-->>F: rows, newest first
+        F-->>B: 200 JSON, entries and seed marker
+    else missing or invalid
+        F-->>B: 401 with WWW-Authenticate
+    end
 ```
-┌────────────────────┐ Authorization: Bearer <token>   ┌────────────────────────────┐
-│ React console      │ ──────────────────────────────► │ FastAPI                    │
-│                    │                                 │                            │
-│ TraceScreen        │ GET /api/trace?limit=50         │ require_principal          │
-│ AuditScreen        │ GET /api/audit?limit=50         │         │                  │
-│ HealthPill         │ GET /api/audit/verify           │         ▼                  │
-│ TokenBar           │ GET /health  (no token)         │ Principal + scopes         │
-│                    │                                 │         │                  │
-│                    │ ◄────────────────────────────── │         ▼                  │
-└────────────────────┘ JSON, newest first              │ trace / audit state        │
-                                                       └────────────────────────────┘
+
+The console renders `decision`, `status`, `error_code`, `audit_id`, and the
+speech string. It never invents a field and never decides whether a call is
+allowed.
+
+### Writes
+
+Undo calls `POST /api/call/{tool}` and the privacy toggles call
+`PUT /api/privacy`. Both routes end at `Router.execute`, so scopes, rules,
+privacy, confirmation, audit, and trace are the same as an MCP call. A
+medium-risk action is a two-step sequence: preview, then the same call with the
+token.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant F as FastAPI
+    participant R as Router.execute
+    participant A as Audit chain
+
+    B->>F: POST /api/call/book_room with params
+    F->>R: Principal, tool, params
+    R->>R: scopes, rules, privacy
+    R->>A: append preview row
+    R-->>B: confirmation_required, preview, token
+
+    B->>F: POST /api/call/book_room with params and token
+    F->>R: Principal, tool, params, token
+    R->>R: check token, re-check scopes and rules
+    R->>R: adapter runs
+    R->>A: append executed row
+    R-->>B: ok, speech, audit_id
 ```
 
-The console never computes a decision. It renders what the server already
-decided: `decision`, `status`, `error_code`, `audit_id`, and the speech string.
-
-### Auth sequence
-
-```
-Browser                         FastAPI                      Router
-   │  Authorization: Bearer t      │                            │
-   ├──────────────────────────────►│ verify token, build        │
-   │                               │ Principal                  │
-   │                               ├───────────────────────────►│ scope check
-   │                               │                            │
-   │  200 JSON                     │                            │
-   │◄──────────────────────────────┤                            │
-   │                               │                            │
-   │  401 + WWW-Authenticate       │                            │
-   │◄──────────────────────────────┤                            │
-```
+The console shows the preview and re-posts with the token. It does not decide
+whether the token is valid, and it does not write the audit entry. A refusal is a
+row too, so the audit chain explains the demo after the fact.
 
 The console stores the operator token in `sessionStorage` and never in a
 deployed build artifact. A 401 keeps the token bar on screen and prints the
@@ -97,7 +138,7 @@ screen.
 ## 3. Amazon theme
 
 The palette follows Amazon's public storefront colours. The values are tokens in
-`frontend/src/styles/theme.css`, and no component uses a raw hex value.
+`src/styles/theme.css`, and no component uses a raw hex value.
 
 ### Colour tokens
 
@@ -183,23 +224,23 @@ must not break on a phone.
 
 ## 4. Component tree
 
-```
-<App>                          hash route, token state, health poll
-├── <AppHeader>                squid ink bar, brand, nav, chain badge slot
-├── <TokenBar>                 only when there is no valid token
-├── <main>
-│   ├── <TraceScreen>          poll /api/trace
-│   │   ├── <TraceFilters>     subject, tool, decision, paused
-│   │   ├── <TraceRow>         time, tool, service, decision, ms, audit id
-│   │   └── <EmptyState>       "no calls yet" with the CLI hint
-│   ├── <AuditScreen>          poll /api/audit, /api/audit/verify
-│   │   ├── <ChainBadge>       ok or broken, rows, head hash
-│   │   ├── <AuditFilters>     tool, decision, date
-│   │   ├── <AuditRow>         decision, params hash prefix, compensator_of
-│   │   └── <UndoButton>       only on reversible, uncompensated rows
-│   ├── <PrivacyScreen>        GET and PUT the five settings
-│   └── <JourneysScreen>       run a YAML journey, show step results
-└── <AppFooter>                rules version, server version, link to /docs
+```mermaid
+flowchart TD
+    App["App<br/>hash route, token, health"] --> Header["AppHeader"]
+    App --> TokenBar["TokenBar<br/>only without a valid token"]
+    App --> Main["main"]
+    App --> Footer["AppFooter"]
+    Main --> Trace["TraceScreen"]
+    Main --> Audit["AuditScreen"]
+    Main --> Privacy["PrivacyScreen"]
+    Main --> Journeys["JourneysScreen"]
+    Trace --> TraceFilters["TraceFilters"]
+    Trace --> TraceRow["TraceRow"]
+    Trace --> EmptyState["EmptyState"]
+    Audit --> ChainBadge["ChainBadge"]
+    Audit --> AuditFilters["AuditFilters"]
+    Audit --> AuditRow["AuditRow"]
+    AuditRow --> UndoButton["UndoButton"]
 ```
 
 State stays local to each screen. The only shared values are the token, the health
@@ -312,7 +353,7 @@ Current endpoints, all JSON, newest first where they return lists:
 | GET | `/api/journeys` | Journey list | bearer | n/a |
 | POST | `/api/journeys/{name}/run` | Run one journey against isolated state | bearer | n/a |
 
-Existing types live in `frontend/src/api/types.ts` and mirror the Pydantic models.
+Existing types live in `src/api/types.ts` and mirror the Pydantic models.
 The new endpoint types (assistant reply, state snapshot, journey result, voice
 config) still need to be added there when the screens are built. The console does
 not invent fields: if a field is missing on the wire, it is missing in the type.
@@ -382,13 +423,12 @@ the token. It never re-implements the confirmation rule.
 
 ## 8. Build and deployment
 
-Local:
+From the repository root:
 
 ```bash
-cd frontend
 pnpm install
 pnpm dev            # http://localhost:5173/console/, proxies /api to :8000
-pnpm build          # static bundle in frontend/dist
+pnpm build          # static bundle in dist/
 pnpm typecheck
 ```
 
@@ -406,13 +446,17 @@ Remove them after an online `pnpm install`, and let the lockfile record the
 current versions.
 
 Backend on port 8000 in another terminal. Paste the dev token into the token bar,
-or set `VITE_CONSOLE_TOKEN` in `frontend/.env.local`. That variable is compiled
-into the bundle, so it is for local work only and `.env.local` is ignored.
+or set `VITE_CONSOLE_TOKEN` in `.env.local` at the repository root. That variable
+is compiled into the bundle, so it is for local work only and `.env.local` is
+ignored.
 
 Deployment, once the screens exist:
 
-1. `pnpm build` produces `frontend/dist`.
-2. The Dockerfile copies it into the image at `/app/frontend/dist`.
+1. `pnpm build` produces `dist/` at the repository root.
+2. The image build moves to the repository root and copies `dist/` into the
+   image at `/app/dist`. CI currently builds from `backend/`, so the Dockerfile
+   paths (`backend/requirements.txt`, `backend/app`, `dist`) change in the same
+   step.
 3. FastAPI mounts it at `/console` with `StaticFiles`, before the catch-all MCP
    mount, and only when the directory exists.
 4. `ALEXA_CORS_ORIGINS` stays empty in production because the console is

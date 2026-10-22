@@ -38,7 +38,7 @@ marked as such before confirmation.
 
 **Privacy controls.** Four toggles, each stored per user and enforced by the server, not by convention: retention (how long audit entries and transcripts are kept), personalization (whether preferences are used), microphone behavior (wake-word only versus continuous, passed through as a declared requirement), and third-party sharing (whether tool results may leave the household's services).
 
-**Developer standard.** Alexa ships as a reference implementation of an MCP developer standard: permission scopes per tool, a shared error taxonomy, simulated user journeys for testing, and a certification checklist that high-risk tools must pass before submission. See [STANDARD.md](STANDARD.md).
+**Developer standard.** Alexa ships as a reference implementation of an MCP developer standard: permission scopes per tool, a shared error taxonomy, simulated user journeys for testing, and a certification checklist that high-risk tools must pass before submission. See [STANDARD.md](docs/STANDARD.md).
 
 ## Quick start
 
@@ -58,18 +58,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-The console is a separate package at the repository root. It runs against the
-same backend:
+The console package sits at the repository root. With the backend still running,
+from the repository root:
 
 ```bash
-cd frontend
 pnpm install
 pnpm dev            # http://localhost:5173/console/
 ```
 
 It proxies `/api` and `/health` to port 8000, so the browser keeps one origin.
-Paste the development token into the token bar, or copy
-`frontend/.env.example` to `frontend/.env.local` for the session.
+Paste the development token into the token bar, or copy `.env.example` to
+`.env.local` for the session.
 
 The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the
 Alexa+ Local Inspector or the MCP Inspector before connecting it to Alexa+. The
@@ -133,7 +132,7 @@ and a bearer token.
 Current limitation: the server publishes RFC 9728 protected-resource metadata
 but does not run an OAuth 2.1 authorization server. If registration requires an
 authorization-server metadata document or an authorization code flow, add one
-before the device test. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the
+before the device test. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the
 failure modes we have already hit.
 
 ## Security and privacy
@@ -195,10 +194,13 @@ Hackathon build. Day 3 is complete: eight tools, versioned YAML rules,
 single-use confirmation tokens, a hash-chained audit log with a seeded startup
 fixture, `audit verify`, undo linked through the log, concise mode with
 `tell_me_more`, server-enforced privacy toggles, simulated adapters, a trace
-buffer, and 132 tests. The Day 4 console scaffold is installed and builds: pnpm,
-React 19, TypeScript, Vite, the Amazon palette as tokens, a typed API client, and
-a health probe. The four screens are next. See [BUILD_LOG.md](BUILD_LOG.md) for
-what is implemented and verified, [DECISIONS.md](DECISIONS.md) for the choices
-and their revisit conditions, [FRONTEND.md](FRONTEND.md) for the console design,
-and `TECHNICAL.md` for architecture and contracts. `AGENTS.md` is the short
-working guide for a new contributor or coding agent.
+buffer, and 188 tests. The Day 4 backend is in place: a deterministic demo
+assistant, an optional ElevenLabs voice proxy, the console REST surface, and four
+YAML journeys. The console scaffold is installed at the repository root and
+builds: pnpm, React 19, TypeScript, Vite, the Amazon palette as tokens, a typed
+API client, and a health probe. The four screens are next. See
+[BUILD_LOG.md](docs/BUILD_LOG.md) for what is implemented and verified,
+[DECISIONS.md](docs/DECISIONS.md) for the choices and their revisit conditions,
+[FRONTEND.md](docs/FRONTEND.md) for the console design, and
+`docs/TECHNICAL.md` for architecture and contracts. `docs/AGENTS.md` is the
+short working guide for a new contributor or coding agent.
