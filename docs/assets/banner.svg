@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-labelledby="t d">
+  <title id="t">Alexa 3.5</title>
+  <desc id="d">Animated banner: Alexa+ sends MCP tool calls through a rules and audit layer before any device changes.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1b2e"/>
+      <stop offset="1" stop-color="#14365c"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00c4cc" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#00c4cc" stop-opacity="1"/>
+      <stop offset="1" stop-color="#7d2ae8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="320" rx="18" fill="url(#bg)"/>
+
+  <g fill="none" stroke="#00c4cc" stroke-width="2">
+    <circle cx="930" cy="160" r="40" opacity="0.9">
+      <animate attributeName="r" values="40;110" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.9;0" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="930" cy="160" r="40" opacity="0.9">
+      <animate attributeName="r" values="40;110" dur="3s" begin="1s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.9;0" dur="3s" begin="1s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <circle cx="930" cy="160" r="34" fill="#00c4cc">
+    <animate attributeName="opacity" values="1;0.55;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <g font-family="Helvetica, Arial, sans-serif">
+    <text x="70" y="130" font-size="72" font-weight="700" fill="#ffffff">Alexa 3.5</text>
+    <text x="72" y="178" font-size="26" fill="#9fd8ff">A deterministic rules and audit layer for Alexa+</text>
+    <text x="72" y="222" font-size="20" fill="#c9d6e3">The model interprets. Rules decide. Every action is previewed, logged, and reversible.</text>
+  </g>
+
+  <g>
+    <rect x="72" y="250" width="0" height="4" rx="2" fill="url(#beam)">
+      <animate attributeName="width" values="0;640;640" keyTimes="0;0.6;1" dur="4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <g fill="#00c4cc">
+    <circle r="7" cy="160" opacity="0">
+      <animate attributeName="cx" values="520;900" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.8;1" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="7" cy="160" opacity="0">
+      <animate attributeName="cx" values="520;900" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.8;1" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
