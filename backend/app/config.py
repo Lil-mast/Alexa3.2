@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Amazon user and skill identifiers. A token subject must be a pseudonym, not
@@ -33,11 +33,38 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Tests and callers can pass `database_url=` even though the environment
+        # name is DATABASE_URL, not ALEXA_DATABASE_URL.
+        populate_by_name=True,
     )
 
     # Public origin Alexa+ calls. It doubles as the OAuth issuer in the metadata
     # we publish, and as the base for the 401 challenge URL.
     public_url: str = "http://localhost:8000"
+
+    # Accounts and sessions are the only state that survives a redeploy. Render
+    # provides DATABASE_URL; local development defaults to a file beside the
+    # backend so a restart keeps the same user and session.
+    database_url: str = Field(
+        default="sqlite:///./data/alexa.db",
+        validation_alias=AliasChoices("DATABASE_URL", "ALEXA_DATABASE_URL"),
+    )
+
+    # Google OAuth. Both halves are required before /api/auth is enabled. The
+    # callback lives on the API origin, never on the frontend origin.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    oauth_redirect_uri: str | None = None
+    frontend_url: str = "http://localhost:5173"
+    session_ttl_seconds: int = 604800
+    # The handoff code is small on purpose. It only needs to survive the redirect
+    # from the callback to the SPA, and a short window limits replay if the URL
+    # ends up somewhere it should not.
+    exchange_code_ttl_seconds: int = 60
+    # Local-only shortcut for UI work without a Google project. It is gated by
+    # both this flag and `is_local`, so a public Render instance cannot expose it
+    # even if the flag is accidentally set.
+    auth_dev_login: bool = False
 
     # A JSON string rather than a secret file keeps the demo to one env var.
     # app.auth parses it into subject, client_id, scopes, and optional expiry.
@@ -47,8 +74,10 @@ class Settings(BaseSettings):
     # which is fine locally but should be narrowed to the App Runner hostname.
     allowed_hosts: str = "*"
 
-    # The console runs on Vite's dev origin, not on this server's origin.
-    cors_origins: str = "http://localhost:5173"
+    # The console runs on Vite's dev origin and on Vercel in production. The
+    # server is on Render, so both are cross-origin. No cookies, so credentials
+    # stay off and the browser only needs to allow the Authorization header.
+    cors_origins: str = "https://alexa.vercel.app,http://localhost:5173"
 
     # JSON logs in App Runner. Uvicorn keeps its own format.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
@@ -80,6 +109,40 @@ class Settings(BaseSettings):
     @classmethod
     def _upper_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
+
+    @field_validator("session_ttl_seconds", "exchange_code_ttl_seconds")
+    @classmethod
+    def _positive_ttl(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("TTL values must be positive")
+        return value
+
+    @field_validator("database_url")
+    @classmethod
+    def _non_empty_database(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("DATABASE_URL must not be empty")
+        return value.strip()
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        """True only when both halves of the Google client exist."""
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def resolved_oauth_redirect_uri(self) -> str:
+        """The callback Google is told to use.
+
+        Production sets this explicitly because the public URL is the Render
+        origin. Local development derives it from `public_url`, so the default
+        works without a second variable.
+        """
+        value = self.oauth_redirect_uri or f"{self.public_url.rstrip('/')}/api/auth/callback/google"
+        return value.rstrip("/")
+
+    @property
+    def frontend_origin(self) -> str:
+        return self.frontend_url.rstrip("/")
 
     @property
     def resource_server_url(self) -> str:

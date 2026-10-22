@@ -5,6 +5,7 @@ import type {
   ToolList,
   TraceList,
   WhoAmI,
+  AssistantReply,
 } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
@@ -92,6 +93,61 @@ async function request<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function post<T>(path: string, body?: unknown): Promise<T> {
+  const token = readToken();
+  const headers = new Headers({ Accept: "application/json" });
+  if (body !== undefined) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new ApiError(0, "The server did not answer in time.");
+    }
+    throw new ApiError(0, "The server is unreachable.");
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, messageFor(response.status));
+  }
+  return (await response.json()) as T;
+}
+
+async function requestAudio(path: string, body: unknown): Promise<Blob> {
+  const token = readToken();
+  const headers = new Headers({ Accept: "audio/mpeg" });
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: new Headers([...headers.entries(), ["Content-Type", "application/json"]]),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new ApiError(0, "Voice audio is unavailable.");
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, "Voice audio is unavailable.");
+  }
+  return response.blob();
+}
+
 /** Read-only calls. Tool calls go through one endpoint, which is not built yet. */
 export const api = {
   health: () => request<Health>("/health"),
@@ -100,4 +156,6 @@ export const api = {
   trace: (limit = 50) => request<TraceList>(`/api/trace?limit=${limit}`),
   audit: (limit = 50) => request<AuditList>(`/api/audit?limit=${limit}`),
   verify: () => request<AuditVerify>("/api/audit/verify"),
+  assistantTurn: (utterance: string) => post<AssistantReply>("/api/assistant/turn", { utterance }),
+  speak: (text: string) => requestAudio("/api/voice/speak", { text }),
 };

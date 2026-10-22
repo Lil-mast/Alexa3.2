@@ -9,6 +9,8 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+# Local SQLite account database. Postgres is used in production.
+backend/data/
 
 # Node
 node_modules/

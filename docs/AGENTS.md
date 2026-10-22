@@ -78,9 +78,11 @@ uncommitted while a build day is in progress.
 | `backend/app/tools/` | Tool manifests (`specs.py`) and handlers |
 | `backend/app/adapters/` | Simulated device and booking state |
 | `backend/app/confirm.py` | Single-use confirmation tokens |
-| `backend/app/auth.py` | Static bearer verifier, scopes, 401 challenge, REST dependency |
+| `backend/app/auth.py` | Static and session bearer verification, scopes, 401 challenge, REST dependency |
+| `backend/app/accounts/` | Google OAuth with PKCE, account/session store, session verifier |
+| `backend/app/api/auth.py` | Browser auth routes: start, callback, exchange, account, logout |
 | `backend/app/models.py` | Wire contract and error taxonomy |
-| `backend/tests/` | Unit, HTTP, voice, journey, and live uvicorn MCP tests |
+| `backend/tests/` | Unit, HTTP, auth, voice, journey, and live uvicorn MCP tests |
 | Repository root (`src/`, `package.json`, `vite.config.ts`) | React operator console: theme tokens, typed API client, screens. Settings in `pnpm-workspace.yaml`, design in `docs/FRONTEND.md` |
 
 ## Invariants
@@ -155,32 +157,36 @@ uncommitted while a build day is in progress.
 
 ## Current state
 
-Day 3 is complete: eight tools (`timer_set`, `lights_set`, `thermostat_set`,
-`book_room`, `undo`, `tell_me_more`, `privacy_get`, `privacy_set`), versioned
-YAML rules, confirmation tokens, a hash-chained audit log with a seeded startup
-fixture and `alexa audit verify`, undo linked through the log, concise mode, and
-server-enforced privacy settings. Day 1 to Day 3 details are in `BUILD_LOG.md`.
+Days 1 to 4 are complete. The eight tools (`timer_set`, `lights_set`,
+`thermostat_set`, `book_room`, `undo`, `tell_me_more`, `privacy_get`,
+`privacy_set`) run through versioned YAML rules, confirmation tokens, a
+hash-chained audit log with a seeded startup fixture and `alexa audit verify`,
+undo linked through the log, concise mode, and server-enforced privacy settings.
 
-Day 4 has started: the React console scaffold is installed at the repository root
-with pnpm, React 19, TypeScript, Vite, Amazon theme tokens, a typed client for
-`/health`, `/api/whoami`, `/api/tools`, `/api/trace`, `/api/audit`, and
-`/api/audit/verify`, plus a token bar. `pnpm typecheck` and `pnpm build` pass.
+The Day 4 backend is in place: a deterministic demo assistant with per-subject
+pending confirmations, an optional ElevenLabs voice proxy with a browser
+fallback, the console REST surface (`/api/config`, `/api/state`, `/api/privacy`,
+`/api/call/{tool}`, `/api/assistant/*`, `/api/voice/*`, `/api/journeys/*`), and
+four YAML journeys with an isolated runner. Google sign-in is in the backend:
+persistent users and sessions, OAuth state and PKCE, single-use exchange codes,
+a session verifier that resolves to the same `Principal` as a static token,
+explicit CORS for Vercel, and SQLite locally or Render Postgres in production.
+The suite is 207 tests and includes parser, confirmation, privacy-gate, voice,
+journey, auth, CORS, and account persistence coverage.
 
-The backend side of Day 4 is in place: a deterministic demo assistant with
-per-subject pending confirmations, an optional ElevenLabs voice proxy with a
-browser fallback, the console REST surface (`/api/config`, `/api/state`,
-`/api/privacy`, `/api/call/{tool}`, `/api/assistant/*`, `/api/voice/*`,
-`/api/journeys/*`), and four YAML journeys with an isolated runner. The suite is
-188 tests and includes parser, confirmation, privacy-gate, voice, and journey
-coverage. The four console screens are next.
+The React app is at the repository root with pnpm, React 19, TypeScript, Vite,
+Amazon theme tokens, a typed client, a landing page, and the operator console.
+The sign-in, callback, and account screens are the next frontend work. The
+backend auth contract is `/api/auth/config`, `/api/auth/google/start`,
+`/api/auth/callback/google`, `POST /api/auth/exchange`, `GET` and `PATCH
+/api/auth/me`, `POST /api/auth/logout`, and a local-only
+`POST /api/auth/dev-login`.
 
-Day 4 next: React console screens (Trace, Audit, Privacy, Journeys) plus the
-assistant bar, the matching TypeScript types in `src/api/types.ts`,
-`ALEXA_ELEVENLABS_API_KEY` for the demo voice, App Runner deploy, and demo
-rehearsal.
-
-Known gaps: no Alexa+ registration or App Runner deployment yet; no OAuth
-authorization server; no physical device test; no persistence; no real device
+Known gaps: no Alexa+ registration, Local Inspector device run, or physical
+device test; no MCP authorization server for Alexa+ (browser Google sign-in is a
+separate flow); the console sign-in screens are not wired yet; the `/console`
+static mount and root-context Docker change are pending; no real device
 integrations; no license chosen. The demo voice is disabled until a key is set,
 and the voice endpoint has no per-token rate limit; the bearer token is the
-control for the demo.
+control for the demo. Render free instances spin down, which resets the
+in-memory house and audit chain.

@@ -1,12 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// The console is served at /console both in dev and in production, so asset
-// paths and the hash route never differ between the two. The proxy keeps the
-// browser origin at 5173, which is the origin the backend already allows.
+// The public app is at the Vercel root, so the base is "/". The operator
+// console is a hash route (#/console/...) inside the same bundle. In
+// production VITE_API_BASE points at the Render API; in development the proxy
+// keeps the browser origin at 5173, which the backend already allows.
 // Vite's root is the repository root: index.html and src/ sit beside backend/.
 export default defineConfig({
-  base: "/console/",
+  base: "/",
   plugins: [react()],
   server: {
     port: 5173,

@@ -1,6 +1,6 @@
 FROM python:3.13-slim
 
-# Unbuffered output keeps App Runner logs in order. No bytecode keeps the image
+# Unbuffered output keeps Render logs in order. No bytecode keeps the image
 # clean, and no pip cache keeps it small.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -15,19 +15,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run as an unprivileged numeric user. The app only reads its own code, so it
-# needs no home directory and no write access to the image.
+# Run as an unprivileged numeric user. Production uses Postgres, but the local
+# SQLite fallback needs a writable directory beside the app.
 COPY --chown=10001:10001 app ./app
+RUN mkdir -p /app/data && chown 10001:10001 /app/data
 USER 10001:10001
 
-# App Runner forwards traffic to this port.
+# Render forwards traffic to this port.
 EXPOSE 8000
 
-# Docker and Compose can use this. App Runner uses its own configured health
-# check against the same path.
+# Docker and Compose can use this. Render uses its own configured health check
+# against the same path.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
 
-# App Runner terminates TLS and adds X-Forwarded-* headers. Trusting them is
-# correct only because the container is not exposed directly to the internet.
+# Render terminates TLS and adds X-Forwarded-* headers. Trusting them is correct
+# only because the container is not exposed directly to the internet.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]

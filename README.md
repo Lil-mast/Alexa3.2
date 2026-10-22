@@ -58,22 +58,43 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-The console package sits at the repository root. With the backend still running,
-from the repository root:
+The frontend sits at the repository root. With the backend still running, from
+the repository root:
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:5173/console/
+pnpm dev            # http://localhost:5173/, console at #/console/
 ```
 
-It proxies `/api` and `/health` to port 8000, so the browser keeps one origin.
-Paste the development token into the token bar, or copy `.env.example` to
-`.env.local` for the session.
+The public app is at `/`; the operator console is the `#/console/` hash route.
+The dev server proxies `/api` and `/health` to port 8000, so the browser keeps
+one origin. Paste the development token into the console token bar, or copy
+`.env.example` to `.env.local` for the session. In production, Vercel builds the
+app with `VITE_API_BASE=https://alexa-api.onrender.com`; no rewrite is needed
+because every screen is a hash route.
 
 The MCP endpoint is served at `http://localhost:8000/mcp`. Inspect it with the
 Alexa+ Local Inspector or the MCP Inspector before connecting it to Alexa+. The
 development bearer token is `dev-token`; see [backend/README.md](backend/README.md)
 for auth, endpoints, and configuration.
+
+### Browser sign-in
+
+The console can also sign in with Google. Copy `backend/.env.example` to
+`backend/.env`, then set `ALEXA_GOOGLE_CLIENT_ID` and
+`ALEXA_GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client. Register both
+callbacks in that client:
+
+```text
+http://localhost:8000/api/auth/callback/google
+https://alexa-api.onrender.com/api/auth/callback/google
+```
+
+Local accounts use `sqlite:///./data/alexa.db`; production uses the
+`DATABASE_URL` Render injects for Postgres. The browser gets an opaque session
+token after a one-time exchange code, never a Google token. Without a Google
+client, use `dev-token` or set `ALEXA_AUTH_DEV_LOGIN=true` and call
+`POST /api/auth/dev-login` from a local origin.
 
 ## Local CLI
 
@@ -118,9 +139,10 @@ migration (owned by Alexa+).
 The server is an MCP resource server. Registration needs a public HTTPS origin
 and a bearer token.
 
-1. Deploy the container to App Runner. Set `ALEXA_PUBLIC_URL` to the service
-   origin, for example `https://example.us-east-1.awsapprunner.com`, and set
-   `ALEXA_ALLOWED_HOSTS` to the hostname without the scheme.
+1. Deploy the API container to Render. Set `ALEXA_PUBLIC_URL` to the API
+   origin, for example `https://alexa-api.onrender.com`, and set
+   `ALEXA_ALLOWED_HOSTS` to the hostname without the scheme. The console is a
+   separate static build on Vercel and calls the API across CORS.
 2. Replace `ALEXA_TOKENS_JSON` with a real token table. Use a pseudonym for the
    `subject`; a raw `amzn1.` id is refused at startup.
 3. In the Alexa+ developer console, register the MCP server URL
@@ -130,10 +152,11 @@ and a bearer token.
 5. Ask for a low-risk action, then a booking preview and confirmation.
 
 Current limitation: the server publishes RFC 9728 protected-resource metadata
-but does not run an OAuth 2.1 authorization server. If registration requires an
-authorization-server metadata document or an authorization code flow, add one
-before the device test. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the
-failure modes we have already hit.
+but does not run an OAuth 2.1 authorization server for MCP clients. Browser
+sign-in is Google OAuth and is separate from that flow. If Alexa+ registration
+requires an authorization-server metadata document, add one before the device
+test. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the failure modes we
+have already hit.
 
 ## Security and privacy
 
@@ -149,10 +172,17 @@ failure modes we have already hit.
 - **Raw parameters stay out of the trace and the audit row.** The console sees a
   parameter hash, the tool, the decision, and the speech. The audit row adds the
   minimal previous device state that undo needs, and nothing the user typed.
-- **State is in memory.** A restart clears timers, lights, bookings, privacy
-  settings, pending confirmations, the trace, and the audit chain. A pending
-  confirmation becomes invalid and the user is asked again. That is safe, not
-  durable. The seeded audit fixture makes the reset visible rather than silent.
+- **Durability is split on purpose.** Accounts and sessions live in SQLite
+  locally and Postgres on Render, so a redeploy does not sign everyone out. The
+  simulated house, trace, audit chain, privacy settings, and pending
+  confirmations stay in memory. A restart clears them, and a pending
+  confirmation becomes invalid. The seeded audit fixture makes the reset visible
+  rather than silent.
+- **Browser sessions are hashed at rest.** The `sess_...` bearer is stored in
+  `sessionStorage`, never `localStorage` or a URL. The database keeps only its
+  SHA-256 hash, plus hashes of OAuth states and exchange codes. Identity is
+  Google's stable `sub`, not the email, and an unverified email is refused.
+  This server sends no email and stores no password.
 - **Retention is real.** Changing `retention_days` immediately replaces older
   rows for that user with tombstones that keep the chain link.
 - **Booking is external.** `book_room` is marked `external=true`, so the privacy
@@ -161,7 +191,7 @@ failure modes we have already hit.
   it choose a tool. Review a change to a description as carefully as a change to
   a handler, and only expose tools whose behavior you control.
 - **The image runs unprivileged.** The container uses UID 10001 and needs no
-  writable volume. App Runner terminates TLS and adds the forwarded headers.
+  writable volume. Render terminates TLS and adds the forwarded headers.
 - **Leak scanning is enforced.** `scripts/check_leaks.py` refuses a commit that
   carries a deployment URL, an AWS account id, an Alexa skill id, a key, or an
   environment file. Enable the hook with `git config core.hooksPath .githooks`.
@@ -184,21 +214,25 @@ auth, the 401 challenge, metadata, rules, defaults, confirmation tokens, replay,
 expiry, cross-user use, booking conflicts, per-user isolation, the `NO_CHANGE`
 path, tool annotations, the CLI, the audit chain including tampering and
 retention tombstones, undo for every reversible tool, concise mode, privacy
-isolation, and a latency guard on the in-memory hot path.
+isolation, Google state and PKCE, exchange replay, session expiry and logout,
+server-side CORS preflight, account persistence across a new app instance, and a
+latency guard on the in-memory hot path.
 CI runs the same checks, verifies that `requirements.txt` matches `uv.lock`, and
 builds the Docker image with a live `/health` check.
 
 ## Status
 
-Hackathon build. Day 3 is complete: eight tools, versioned YAML rules,
+Hackathon build. Days 1 to 4 are complete: eight tools, versioned YAML rules,
 single-use confirmation tokens, a hash-chained audit log with a seeded startup
 fixture, `audit verify`, undo linked through the log, concise mode with
 `tell_me_more`, server-enforced privacy toggles, simulated adapters, a trace
-buffer, and 188 tests. The Day 4 backend is in place: a deterministic demo
-assistant, an optional ElevenLabs voice proxy, the console REST surface, and four
-YAML journeys. The console scaffold is installed at the repository root and
-builds: pnpm, React 19, TypeScript, Vite, the Amazon palette as tokens, a typed
-API client, and a health probe. The four screens are next. See
+buffer, a deterministic demo assistant, an optional ElevenLabs voice proxy, the
+console REST surface, and four YAML journeys. Google sign-in, persistent accounts
+and sessions, single-use exchange codes, explicit CORS for Vercel, and Render
+Postgres are in the backend; the suite is at 207 tests. The frontend is at the
+repository root: pnpm, React 19, TypeScript, Vite, a warm editorial landing page,
+the Amazon-themed operator console, a typed API client, and a health probe.
+The sign-in, callback, and account screens are next. See
 [BUILD_LOG.md](docs/BUILD_LOG.md) for what is implemented and verified,
 [DECISIONS.md](docs/DECISIONS.md) for the choices and their revisit conditions,
 [FRONTEND.md](docs/FRONTEND.md) for the console design, and

@@ -10,10 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
+from starlette.concurrency import run_in_threadpool
 
 from app import __version__
+from app.accounts.google import GoogleIdentityClient, GoogleOAuthClient
+from app.accounts.service import AuthService
+from app.accounts.store import AccountStore
+from app.accounts.verifier import build_session_verifier
 from app.api import (
     build_assistant_router,
+    build_auth_router,
     build_call_router,
     build_journeys_router,
     build_meta_router,
@@ -48,17 +54,24 @@ def _transport_security(settings: Settings) -> TransportSecuritySettings:
     )
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, google: GoogleIdentityClient | None = None) -> FastAPI:
     """Build a fresh app and its runtime state.
 
     Tests call this with explicit settings so tokens and URLs do not leak
     between cases. Production uses the module-level `app` below.
+
+    `google` is injectable so the auth suite can exercise the callback without
+    network access or a real Google project.
     """
     settings = settings or get_settings()
     # A tool without a rule, or a rule without a tool, is a configuration bug.
     # Fail at startup, not on the first voice request.
     RULES.check_tools(TOOLS)
-    verifier = build_verifier(settings)
+    # Accounts and sessions are persistent. The house, audit, and trace below are
+    # not: a redeploy signs nobody out but resets the demo home.
+    accounts = AccountStore(settings.database_url)
+    auth_service = AuthService(settings, accounts, google or GoogleOAuthClient(settings))
+    verifier = build_session_verifier(build_verifier(settings), accounts, SCOPES)
     # One state object per app. Adapters and the trace buffer live here, so a
     # test app never shares timers or lights with the running server.
     state = AppState(settings=settings, trace=TraceBuffer(settings.trace_capacity))
@@ -85,6 +98,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         setup_logging(settings.log_level)
+        # The store creates its four tables in __init__. A real service would
+        # run Alembic migrations before the new process takes traffic; until
+        # then, adding a column means recreating the account tables.
+        await run_in_threadpool(accounts.prune)
         # Public deployments fail closed only for config that is definitely
         # wrong. These warnings cover config that is valid but unsafe, so the
         # first log lines tell a deployer what to change.
@@ -93,13 +110,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             startup_logger.warning("startup_warning", extra={"detail": message})
         # A mounted app's lifespan does not run automatically, and the streamable
         # session manager needs it. Start it here so sessions have a manager.
-        async with mcp_app.router.lifespan_context(mcp_app):
-            # A redeploy clears the containers. Say so once, in the log, with
-            # the number of seeded rows the console will show.
-            marker = state.audit.seed_marker
-            if marker:
-                startup_logger.info("audit_seeded", extra=marker)
-            yield
+        try:
+            async with mcp_app.router.lifespan_context(mcp_app):
+                # A redeploy clears the containers. Say so once, in the log, with
+                # the number of seeded rows the console will show.
+                marker = state.audit.seed_marker
+                if marker:
+                    startup_logger.info("audit_seeded", extra=marker)
+                yield
+        finally:
+            accounts.close()
 
     app = FastAPI(
         title="Alexa",
@@ -111,16 +131,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.alexa = state
     app.state.assistant = assistant
     app.state.voice = voice
+    app.state.accounts = accounts
+    app.state.auth = auth_service
 
-    # The console is a separate dev origin. Credentials are off because auth is
-    # a bearer header, not a cookie.
+    # The console runs on a different origin in development (Vite) and in
+    # production (Vercel). Auth is a bearer header, not a cookie, so credentials
+    # stay off. The browser still sends a preflight for Authorization, which the
+    # explicit header list answers without opening the endpoint to any header.
     if settings.cors_origin_list:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origin_list,
             allow_credentials=False,
             allow_methods=["*"],
-            allow_headers=["*"],
+            allow_headers=["Authorization", "Content-Type"],
         )
 
     # RFC 9728 metadata must live at the origin root, not under /mcp. Register it
@@ -164,8 +188,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/whoami", tags=["console"])
     async def whoami(principal: Principal = Depends(require_principal)) -> dict:
-        # Debugging aid for the console and the Alexa+ connection.
-        return {"subject": principal.subject, "client_id": principal.client_id, "scopes": list(principal.scopes)}
+        # Debugging aid for the console and the Alexa+ connection. Profile fields
+        # are null for a static token and populated for a Google session.
+        return {
+            "subject": principal.subject,
+            "client_id": principal.client_id,
+            "scopes": list(principal.scopes),
+            "email": principal.email,
+            "display_name": principal.display_name,
+            "provider": principal.provider,
+            "user_id": principal.user_id,
+            "auth_type": principal.auth_type,
+            "session_expires_at": principal.session_expires_at,
+        }
 
     @app.get("/api/tools", tags=["console"])
     async def list_tools(_: Principal = Depends(require_principal)) -> dict:
@@ -210,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # caller from the same verifier, and every write funnels through the router.
     for api_router in (
         build_meta_router(state, settings),
+        build_auth_router(settings, auth_service, require_principal),
         build_state_router(state, assistant, require_principal),
         build_privacy_router(state, router, require_principal),
         build_call_router(router, require_principal),

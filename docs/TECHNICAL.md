@@ -9,7 +9,7 @@ Customer voice
 Alexa+ (LLM: intent interpretation, response generation, UI rendering)
      │  MCP over Streamable HTTP, spec 2025-11-25
      ▼
-Alexa MCP server (FastAPI, Python)                 ← AWS only for the Alexa+ endpoint
+Alexa MCP server (FastAPI, Python)                 ← Render (API + MCP)
      ├── Auth & scope check
      ├── Tool router
      ├── Rules engine (deterministic validation and execution)
@@ -19,8 +19,8 @@ Alexa MCP server (FastAPI, Python)                 ← AWS only for the Alexa+ e
      └── Device / service adapters (simulated for the demo)
      │
      ▼
-SQLite (dev) / Postgres (deploy) for audit, settings, tokens
-(the demo build keeps them in process memory; see D12 and D29)
+SQLite (dev) / Postgres (Render) for accounts and sessions
+(the house, audit, trace, and confirmations stay in process memory; see D12, D29, and D37)
      ▲
      │  REST (JSON)
 React console (Vite + TypeScript): trace viewer, audit browser, privacy panel, journey runner
@@ -28,7 +28,7 @@ React console (Vite + TypeScript): trace viewer, audit browser, privacy panel, j
 
 **Division of responsibility.** The model never receives device credentials and never calls adapters directly. It produces a tool call with parameters. The router validates the call against the tool's schema, then the rules engine validates the values against declared bounds, and only then does an adapter run.
 
-**AWS boundary.** AWS hosts the public MCP endpoint that Alexa+ connects to (for example, behind an Application Load Balancer or App Runner service). All other components run locally or on a non-AWS host. This keeps the AWS surface small and makes the rest of the stack portable. This is an assumption to confirm with the team.
+**Hosting boundary.** Render hosts one API container for the REST surface, the MCP endpoint, and Google OAuth callbacks. Vercel serves the static console. Accounts and sessions use Render Postgres; every other piece of demo state stays in the container. App Runner remains an alternative host for the MCP container because the contract is only port 8000, TLS termination, and forwarded headers, but it is not the planned demo path.
 
 ## 2. Latency budget
 
@@ -222,8 +222,9 @@ React + TypeScript at the repository root (`src/`, `index.html`,
 - **Journeys:** run the simulated journeys and see pass or fail per step.
 
 It reads `/health`, `/api/config`, `/api/whoami`, `/api/tools`, `/api/trace`,
-`/api/audit`, `/api/audit/verify`, and `/api/state`. Writes (undo, privacy
-toggles) go through one `POST /api/call/{tool}` endpoint that calls
+`/api/audit`, `/api/audit/verify`, and `/api/state`. The account page uses
+`/api/auth/me`, `/api/auth/exchange`, and `/api/auth/logout`. Writes (undo,
+privacy toggles) go through one `POST /api/call/{tool}` endpoint that calls
 `Router.execute`. The assistant bar uses `/api/assistant/turn` and the session
 routes; the voice button uses `/api/voice/speak` and falls back to browser
 speech. Journeys are listed from `/api/journeys` and run through
@@ -250,7 +251,114 @@ console can use browser speech without changing the transcript.
 `FRONTEND.md` owns the design: theme tokens and contrast, diagrams, screen
 specs, the API contract, accessibility, testing, and the build plan.
 
-## 10. Repository layout
+## 10. Accounts, Google sign-in, and persistence
+
+The MCP endpoint and the browser console authenticate differently but resolve to
+the same `Principal`:
+
+- **Static bearer tokens** from `ALEXA_TOKENS_JSON` remain the Alexa+, inspector,
+  and CLI path. They are capabilities with a subject, a scope set, and an
+  optional expiry. A public deployment replaces the shipped `dev-token`.
+- **Google sessions** are opaque `sess_...` bearer tokens created after the
+  browser OAuth flow. They carry the account profile and the same demo scopes,
+  and `Router.execute` cannot tell the two kinds apart.
+
+### Identity and tables
+
+Google identity is `(provider, provider_account_id)`, where the account id is
+Google's stable `sub`. Email is refreshed on every login but is not the key: an
+address change must not transfer a household. The audit subject is
+`user_<uuid>`, generated at first login and never derived from an email or a
+Google id.
+
+| Table | Columns | Purpose |
+|---|---|---|
+| `auth_users` | `id`, `subject`, `email`, `display_name`, `email_verified`, `provider`, `provider_account_id`, `created_at`, `last_login_at` | One row per Google account. Unique on `(provider, provider_account_id)` and on `subject`. |
+| `auth_sessions` | `id`, `user_id`, `token_hash`, `created_at`, `expires_at`, `last_seen_at`, `revoked_at` | Browser sessions. Only the SHA-256 hash of the bearer is stored. `last_seen_at` is refreshed at most once a minute. |
+| `auth_oauth_states` | `state_hash`, `provider`, `code_verifier`, `redirect_after`, `created_at`, `expires_at`, `consumed_at` | Short-lived OAuth state and PKCE verifier. The row is consumed before Google is called. |
+| `auth_exchange_codes` | `code_hash`, `session_id`, `created_at`, `expires_at`, `used_at` | One-time handoff from the callback to the SPA. Bound to the pending session. |
+
+The state and code columns hold hashes, not the raw values. The raw session
+token exists only in the browser that received it and in the `Authorization`
+header; a database dump does not yield a usable credential.
+
+### Flow
+
+1. The browser navigates to `GET /api/auth/google/start?redirect_after=/console`.
+2. The server creates a state, a PKCE verifier, and a challenge, stores the
+   state and verifier, and redirects to Google with scopes
+   `openid email profile`.
+3. Google returns to `GET /api/auth/callback/google`. The server consumes the
+   state before the network call, exchanges the code, and reads the userinfo
+   endpoint over TLS. An unverified email is refused.
+4. The server upserts the account, creates a session with a throwaway token, and
+   creates a single-use exchange code bound to that session.
+5. The browser lands on `/#/auth/callback?code=...&next=...`. It removes the
+   code from the hash with `history.replaceState` and posts it to
+   `POST /api/auth/exchange`.
+6. The exchange consumes the code, rotates the session token, and returns the
+   bearer once. The code is never a bearer and cannot be replayed. Codes expire
+   after 60 seconds; sessions after seven days by default.
+
+Other routes: `GET /api/auth/me` returns the account, `PATCH /api/auth/me`
+changes the display name, `POST /api/auth/logout` revokes the session, and
+`POST /api/auth/dev-login` is a local-only shortcut gated by
+`ALEXA_AUTH_DEV_LOGIN` and a local `ALEXA_PUBLIC_URL`.
+
+### CORS, URLs, and environment
+
+The production browser origin is Vercel and the API origin is Render. CORS is
+explicit and credential-free because auth is a bearer header, not a cookie:
+
+```python
+allow_origins = ["https://alexa.vercel.app", "http://localhost:5173"]
+allow_credentials = False
+allow_headers = ["Authorization", "Content-Type"]
+allow_methods = ["*"]
+```
+
+| Variable | Local | Production |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///./data/alexa.db` | Render Postgres connection string (`postgres://` or `postgresql://`) |
+| `ALEXA_GOOGLE_CLIENT_ID` | Google OAuth client id | Same client, production redirect URI registered |
+| `ALEXA_GOOGLE_CLIENT_SECRET` | secret, never committed | Render secret |
+| `ALEXA_OAUTH_REDIRECT_URI` | `http://localhost:8000/api/auth/callback/google` | `https://alexa-api.onrender.com/api/auth/callback/google` |
+| `ALEXA_FRONTEND_URL` | `http://localhost:5173` | `https://alexa.vercel.app` |
+| `ALEXA_SESSION_TTL_SECONDS` | `604800` | `604800` |
+| `ALEXA_EXCHANGE_CODE_TTL_SECONDS` | `60` | `60` |
+| `ALEXA_AUTH_DEV_LOGIN` | `true` or `false` | leave `false`; the service also requires a local public URL |
+
+`ALEXA_PUBLIC_URL` remains the API origin. When `ALEXA_OAUTH_REDIRECT_URI` is
+unset, the callback derives from it.
+
+### Persistence boundary
+
+Accounts and sessions survive a Render redeploy. The simulated house, trace,
+audit chain, confirmation tokens, and journey results do not: they are in
+process memory by design (D12 and D29). The account page must show the exact
+`demo_notice` sentence: `Demo house resets after inactivity or redeploy. Your
+account and sign-in stay.`
+
+Tables are created with SQLAlchemy `create_all` at startup for the demo. A small
+compatibility step adds `last_seen_at` to an older session table and recreates
+the short-lived exchange-code table when its old `user_id` column is present, so
+the first deployed database keeps working. Alembic is still the next step before
+the schema changes again. The store uses SQLAlchemy Core and `psycopg[binary]`
+on Postgres; the auth routes are plain `def` handlers so FastAPI runs their
+blocking driver in a threadpool. The MCP and REST verifiers hop into the same
+threadpool only for the session lookup.
+
+### Render checklist
+
+- Create a Render Postgres instance and copy its internal `DATABASE_URL`.
+- Set the Google client id and secret, `ALEXA_OAUTH_REDIRECT_URI`,
+  `ALEXA_FRONTEND_URL`, `ALEXA_PUBLIC_URL`, and `ALEXA_CORS_ORIGINS`.
+- Add the exact production callback URI to the Google Cloud OAuth client.
+- Use a paid instance or a keep-alive ping on demo day: a free instance spins
+  down, which clears the in-memory house and audit chain. Accounts and sessions
+  still survive because they are in Postgres.
+
+## 11. Repository layout
 
 ```
 alexa/
@@ -274,19 +382,20 @@ alexa/
 │   │   ├── assistant/        # deterministic parser, pending confirmation, replies
 │   │   ├── voice/            # ElevenLabs proxy and browser fallback contract
 │   │   ├── journeys/         # schema, loader, isolated runner, fixtures
+│   │   ├── accounts/         # Google OAuth, account store, session verifier
 │   │   ├── rules/            # engine.py, rules/*.yaml
 │   │   ├── confirm.py        # tokens
 │   │   ├── audit.py          # hash-chained log
 │   │   ├── privacy.py
 │   │   ├── adapters/         # timers.py, lights.py, climate.py, media.py, booking.py (simulated)
 │   │   └── tools/            # ToolSpec manifests
-│   ├── tests/                # unit, HTTP, voice, journey, live MCP tests
+│   ├── tests/                # unit, HTTP, auth, voice, journey, live MCP tests
 │   └── requirements.txt
 └── scripts/
     └── check_leaks.py
 ```
 
-## 11. Build plan (hackathon)
+## 12. Build plan (hackathon)
 
 | Block | Scope | Done when |
 |---|---|---|
@@ -300,7 +409,7 @@ alexa/
 
 Cut order if time runs short: certification runner first (keep the checklist as a document), then the console's journey screen, then the booking tool. Never cut the rules engine, confirmations, or the audit log, because those are the principles the project is judged on.
 
-## 12. Risks
+## 13. Risks
 
 - **Latency on Alexa+ round trips.** Mitigation: no LLM in the request path, warm process, adapter timeouts. Measure with the Local Inspector before the demo.
 - **Alexa+ registration details.** The public docs describe the add-on flow through the `alexa-ai` CLI. Confirm the exact registration steps for a self-hosted server in the track resources before building the deployment.

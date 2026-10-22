@@ -1,10 +1,14 @@
 """Bearer authentication shared by the MCP endpoint and the REST console API.
 
-Production would use an OAuth 2.1 authorization server. For the hackathon the
-server is a resource server with a static token table: each token maps to a
-subject and the scopes granted to that subject. The MCP SDK's bearer middleware
-returns the standard 401 with a `WWW-Authenticate` challenge and resource
-metadata, and every tool re-checks its own scopes before it runs.
+Two kinds of bearer token are accepted. A static token from
+`ALEXA_TOKENS_JSON` is the inspector, CLI, and Alexa+ path. A Google account
+session is an opaque random token stored only as a hash in Postgres or SQLite.
+Both resolve to the same `Principal`, so the router, audit, and trace never need
+to know which one the caller used.
+
+The MCP SDK's bearer middleware returns the standard 401 with a
+`WWW-Authenticate` challenge and resource metadata, and every tool re-checks its
+own scopes before it runs.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import hmac
 import json
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import HTTPException, Request, status
 from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -34,13 +40,23 @@ class TokenRecord(BaseModel):
 class Principal:
     """The authenticated caller. Never log the token itself.
 
-    `subject` is the pseudonymous household/user key. Device adapters and,
-    later, the audit log use it to keep one user's data separate from another's.
+    `subject` is the pseudonymous household/user key. Device adapters and the
+    audit log use it to keep one user's data separate from another's. A Google
+    session also carries its account and session ids, but `subject` is still the
+    only key the rest of the app uses.
     """
 
     subject: str
     client_id: str
     scopes: tuple[str, ...]
+    auth_type: Literal["session", "token"] = "token"
+    user_id: int | None = None
+    session_id: int | None = None
+    session_expires_at: datetime | None = None
+    email: str | None = None
+    display_name: str | None = None
+    provider: str | None = None
+    email_verified: bool = False
 
 
 def parse_tokens(raw: str) -> dict[str, TokenRecord]:
@@ -100,11 +116,40 @@ def build_verifier(settings: Settings) -> StaticTokenVerifier:
     return StaticTokenVerifier(parse_tokens(settings.tokens_json))
 
 
+def _claim_str(claims: dict | None, key: str) -> str | None:
+    value = (claims or {}).get(key)
+    return value if isinstance(value, str) else None
+
+
+def _claim_int(claims: dict | None, key: str) -> int | None:
+    value = (claims or {}).get(key)
+    return value if isinstance(value, int) else None
+
+
+def _claim_bool(claims: dict | None, key: str) -> bool:
+    return (claims or {}).get(key) is True
+
+
 def principal_from_access_token(access: AccessToken) -> Principal:
+    claims = access.claims or {}
+    auth_type = claims.get("auth_type")
+    if auth_type not in {"session", "token"}:
+        auth_type = "token"
+    session_expires_at = None
+    if auth_type == "session" and access.expires_at is not None:
+        session_expires_at = datetime.fromtimestamp(access.expires_at, UTC)
     return Principal(
         subject=access.subject or access.client_id,
         client_id=access.client_id,
         scopes=tuple(access.scopes),
+        auth_type=auth_type,
+        user_id=_claim_int(claims, "user_id"),
+        session_id=_claim_int(claims, "session_id"),
+        session_expires_at=session_expires_at,
+        email=_claim_str(claims, "email"),
+        display_name=_claim_str(claims, "display_name"),
+        provider=_claim_str(claims, "provider"),
+        email_verified=_claim_bool(claims, "email_verified"),
     )
 
 
@@ -118,17 +163,21 @@ def www_authenticate(settings: Settings, *, error: str = "invalid_token") -> str
     )
 
 
-def build_rest_auth(verifier: StaticTokenVerifier, settings: Settings):
+def bearer_token(request: Request) -> str | None:
+    """The only accepted source of a bearer token. No query strings."""
+    header = request.headers.get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return token.strip() or None
+
+
+def build_rest_auth(verifier: TokenVerifier, settings: Settings):
     """FastAPI dependency for the operator console API."""
 
     async def require_principal(request: Request) -> Principal:
-        # The header is the only accepted source. No query-string tokens, because
-        # those end up in access logs and browser history.
-        header = request.headers.get("authorization", "")
-        scheme, _, token = header.partition(" ")
-        access = None
-        if scheme.lower() == "bearer" and token:
-            access = await verifier.verify_token(token.strip())
+        token = bearer_token(request)
+        access = await verifier.verify_token(token) if token else None
         if access is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -34,6 +34,12 @@ class AssistantConfig(BaseModel):
 class AuthConfig(BaseModel):
     scheme: Literal["bearer"]
     scopes: list[str]
+    # Public capability flags, never the client id or secret. The landing page
+    # uses `google_enabled` to decide whether to render the sign-in button.
+    google_enabled: bool
+    frontend_url: str
+    session_ttl_seconds: int
+    accounts: Literal["database"]
 
 
 class AuditConfig(BaseModel):
@@ -79,7 +85,14 @@ def build_meta_router(state: AppState, settings: Settings) -> APIRouter:
                 max_chars=settings.voice_max_chars,
                 fallback="browser_speech_synthesis",
             ),
-            auth=AuthConfig(scheme="bearer", scopes=SCOPES),
+            auth=AuthConfig(
+                scheme="bearer",
+                scopes=SCOPES,
+                google_enabled=settings.google_oauth_enabled,
+                frontend_url=settings.frontend_origin,
+                session_ttl_seconds=settings.session_ttl_seconds,
+                accounts="database",
+            ),
             audit=AuditConfig(
                 seeded=marker is not None,
                 rows=len(state.audit),

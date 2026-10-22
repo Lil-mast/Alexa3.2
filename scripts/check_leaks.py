@@ -99,6 +99,13 @@ DOC_HOSTS = {
     "w3.org",
     "ietf.org",
     "unicode.org",
+    # Documented demo origins and a public provider API. These are not
+    # secrets; the deployment and voice docs need the exact hosts.
+    "alexa.vercel.app",
+    "alexa-api.onrender.com",
+    "api.elevenlabs.io",
+    "google.com",
+    "googleapis.com",
 }
 
 LOCAL_HOSTS = {
@@ -163,6 +170,13 @@ def _host_allowed(host: str) -> bool:
 
 def _url_allowed(match: re.Match[str]) -> bool:
     raw = match.group(0).rstrip(".,;:)]}")
+    # CORS settings and env examples use comma-separated lists. Treat every
+    # member as its own URL instead of reading `host,http://...` as one host.
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    return bool(parts) and all(_single_url_allowed(part) for part in parts)
+
+
+def _single_url_allowed(raw: str) -> bool:
     try:
         host = urlsplit(raw).hostname or ""
     except ValueError:

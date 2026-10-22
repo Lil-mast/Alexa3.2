@@ -25,8 +25,9 @@ build plan at the end of this document.
 | Fonts | System stack, no downloaded font | Amazon Ember is proprietary and must not be bundled. The stack degrades to Segoe UI or Roboto |
 | Branding | Amazon palette, no Amazon logo or smile | Visual continuity for an internal tool without implying an official Amazon product |
 
-The backend already allows `http://localhost:5173` in `ALEXA_CORS_ORIGINS`, so the
-dev server talks to the API directly as well as through the Vite proxy.
+The backend allows both `http://localhost:5173` and `https://alexa.vercel.app`
+in `ALEXA_CORS_ORIGINS`. Development normally uses the Vite proxy; the browser
+still has a direct path when a screen calls the API origin explicitly.
 
 ## 2. How it runs
 
@@ -36,37 +37,86 @@ constant and means no CORS preflight during development.
 
 ### Where it runs
 
-The console is a Vite app at the repository root. In development, the browser
-loads `/console/` from Vite and every API call is proxied to uvicorn. In
-production, the built files and the API come from the same FastAPI process, so
-the browser sees one origin and no CORS.
+The Vite app is at the repository root. In development, the browser loads `/`
+from Vite, the public landing page is the root route, and the console is the
+`#/console/` hash route. Every API call is proxied to uvicorn. In production,
+Vercel serves the static build from the root and Render serves the API. They are
+different origins, so the console sends the bearer header across CORS. The
+backend can still serve `/console` from the same image as a single-origin
+fallback, but that is no longer the production path.
 
 ```mermaid
 flowchart LR
     subgraph dev["Development"]
         browserDev["Browser<br/>localhost:5173"]
-        vite["Vite dev server<br/>base /console/"]
+        vite["Vite dev server<br/>base /"]
         apiDev["uvicorn<br/>localhost:8000"]
-        browserDev -->|"GET /console/"| vite
+        browserDev -->|"GET / and #/console/"| vite
         vite -->|"proxy /api and /health"| apiDev
     end
 
-    subgraph prod["Production: App Runner"]
-        browserProd["Browser"]
-        apiProd["FastAPI<br/>/console, /api, /health, /mcp"]
-        browserProd -->|"HTTPS, same origin"| apiProd
+    subgraph prod["Production"]
+        browserProd["Browser<br/>alexa.vercel.app"]
+        vercel["Vercel<br/>static console"]
+        apiProd["Render<br/>FastAPI /api, /health, /mcp"]
+        browserProd -->|"HTTPS"| vercel
+        vercel -->|"HTTPS, CORS + Bearer"| apiProd
     end
 
     apiDev --> router["Router.execute"]
     apiProd --> router
 ```
 
-One image is deliberate. App Runner is the only public host (D19), so the console
-ships inside the backend image rather than on a second service. Two hosting
-targets would double the deploy, the TLS, and the auth surface for a demo console.
-The image plan assumes the build switches to the repository root when the static
-mount lands; today CI builds from `backend/`, which is why the mount is still
-pending.
+Two hosts are deliberate now. Vercel gives the console a static CDN and an
+independent release, while Render hosts the API, MCP endpoint, and Postgres. The
+browser is a bearer client, not a cookie client, so `allow_credentials=False` and
+the CORS allow list can stay narrow. The conditional `/console` mount remains in
+the backend image for single-origin demos; the root-context Docker change is
+still pending.
+
+
+### Accounts and sessions
+
+The browser account is a Google session, separate from the Alexa+ static bearer.
+The landing page asks `/api/whoami` whether the stored session is still valid;
+it goes to `#/demo` only after a 2xx answer, and to `#/signup` otherwise. Signup
+navigates to the API start route and comes back to `/#/auth/callback`. The
+callback page removes the one-time code from the hash with
+`history.replaceState`, posts it to `/api/auth/exchange`, and stores the returned
+bearer in `sessionStorage`. It never puts the bearer in a URL or in
+`localStorage`.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as API
+    participant G as Google
+    B->>A: GET /api/auth/google/start
+    A->>A: create state and PKCE verifier
+    A-->>B: 302 to Google
+    B->>G: consent, scopes openid email profile
+    G-->>A: GET /api/auth/callback/google?code&state
+    A->>A: consume state, exchange code, read userinfo
+    A->>A: upsert by Google sub, create pending session and code
+    A-->>B: 302 /#/auth/callback?code=...&next=...
+    B->>A: POST /api/auth/exchange {code}
+    A->>A: consume code, rotate session token
+    A-->>B: bearer token, account, demo notice
+```
+
+Failures return to `/#/login?error=<reason>`. The stable reasons are
+`email_unverified`, `invalid_state`, `oauth_denied`, `oauth_failed`,
+`auth_unavailable`, and `invalid_exchange_code`. The login page reads the reason
+and shows a sentence; it never renders a provider response or an exception.
+
+The account page shows the email, display name, provider, and sign-out action.
+It must also show the backend's `demo_notice` verbatim: `Demo house resets
+after inactivity or redeploy. Your account and sign-in stay.` The notice is on
+every auth response so the UI cannot drift from the backend.
+
+When the API is local and `ALEXA_AUTH_DEV_LOGIN=true`, the login page may offer
+`POST /api/auth/dev-login` instead of Google. It returns the same token shape and
+is unavailable on a public origin.
 
 ### Reads
 
@@ -335,6 +385,14 @@ Current endpoints, all JSON, newest first where they return lists:
 | GET | `/health` | Status, versions, tool count, audit rows, seeded flag | none | n/a |
 | GET | `/api/config` | Versions, tool count, voice availability, persistence marker | none | n/a |
 | GET | `/api/whoami` | Subject, client id, scopes for the current token | bearer | n/a |
+| GET | `/api/auth/config` | Google availability, start URL, frontend URL, TTL, dev login | none | n/a |
+| GET | `/api/auth/google/start` | Create state and PKCE, redirect to Google | none | n/a |
+| GET | `/api/auth/callback/google` | Consume state, exchange code, redirect to the SPA | none | n/a |
+| POST | `/api/auth/exchange` | Trade a single-use code for a session bearer | none | code 1 to 256 |
+| GET | `/api/auth/me` | Account and session expiry for the current bearer | bearer | n/a |
+| PATCH | `/api/auth/me` | Change the display name on a session | bearer | name 1 to 80 |
+| POST | `/api/auth/logout` | Revoke the current session | bearer | n/a |
+| POST | `/api/auth/dev-login` | Local-only session without Google | none | n/a |
 | GET | `/api/tools` | Manifests, field rules, rules version, confirmation TTL | bearer | n/a |
 | GET | `/api/trace` | Trace entries | bearer | `limit` 1 to 200 |
 | GET | `/api/audit` | The caller's audit rows plus the seed marker | bearer | `limit` 1 to 200 |
@@ -427,7 +485,7 @@ From the repository root:
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:5173/console/, proxies /api to :8000
+pnpm dev            # http://localhost:5173/, console at #/console/
 pnpm build          # static bundle in dist/
 pnpm typecheck
 ```
@@ -459,18 +517,26 @@ Deployment, once the screens exist:
    step.
 3. FastAPI mounts it at `/console` with `StaticFiles`, before the catch-all MCP
    mount, and only when the directory exists.
-4. `ALEXA_CORS_ORIGINS` stays empty in production because the console is
-   same-origin.
+4. Set `ALEXA_CORS_ORIGINS` on the API to the Vercel origin plus
+   `http://localhost:5173` for local work. The console is a different origin in
+   production, so the CORS preflight for `Authorization` must succeed.
+5. Set `ALEXA_GOOGLE_CLIENT_ID`, `ALEXA_GOOGLE_CLIENT_SECRET`,
+   `ALEXA_OAUTH_REDIRECT_URI`, `ALEXA_FRONTEND_URL`, `ALEXA_PUBLIC_URL`, and
+   `DATABASE_URL` on Render. Register the production callback URI in the Google
+   Cloud OAuth client.
 
-The console is served from the same origin as the API, so there is no CORS
-preflight and no second certificate. The mount must stay conditional: a checkout
-without a frontend build should still start.
+The `/console` mount must stay conditional: a checkout without a frontend build
+should still start. In the Vercel path the browser never loads that mount.
 
 ## 9. Build plan
 
 - [x] Design doc, theme tokens, typed client, shell, health probe, token bar.
 - [x] `pnpm install`, `pnpm typecheck`, `pnpm build`, and a first `pnpm dev`
       against the local backend, checked with a headless browser.
+- [x] Public landing page at `/`: warm editorial layout, Alexa+ comparison,
+      problem, solution flow, proof, FAQ, and a session-aware CTA that goes to
+      `#/demo` only after the server validates the stored session.
+- [ ] Signup, login, and the `#/auth/callback` exchange.
 - [ ] Trace screen with filters, pause, and the empty state.
 - [ ] Audit screen with the chain badge and the undo button.
 - [ ] `POST /api/call/{tool}` plus the Privacy screen.

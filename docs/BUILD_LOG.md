@@ -866,3 +866,66 @@ headless Chrome         -> shell renders, health pill "8 tools · 3 rows"
 
 Trace and Audit screens, then the assistant bar and the privacy and journey
 screens.
+
+## 2026-10-22: Google accounts, persisted sessions, and Render Postgres
+
+### Delivered
+
+- `backend/app/accounts/` now owns browser identity and persistence:
+  `google.py` (authorization code plus PKCE, injectable transport),
+  `store.py` (SQLAlchemy Core tables and queries), `service.py` (policy and the
+  one-time handoff), `verifier.py` (session bearer to `Principal`), and
+  `models.py` (frozen records).
+- Four tables: `auth_users`, `auth_sessions`, `auth_oauth_states`, and
+  `auth_exchange_codes`. Sessions and exchange codes store hashes only.
+  `auth_sessions` carries `last_seen_at` and `revoked_at`; exchange codes are
+  bound to a pending session.
+- Google flow: `/api/auth/google/start` (also `/api/auth/login/google`),
+  `/api/auth/callback/google`, `POST /api/auth/exchange`, `GET` and `PATCH
+  /api/auth/me`, `POST /api/auth/logout`, and a local-only
+  `POST /api/auth/dev-login`.
+- `app/auth.py` resolves a static token or a session to the same `Principal`.
+  Session claims carry the account id, session id, email, display name, and
+  provider; `subject` remains `user_<uuid>`, so audit and adapters do not branch
+  on the auth method.
+- `backend/app/api/auth.py` keeps the auth routes synchronous, so the blocking
+  SQLAlchemy driver runs in FastAPI's threadpool. The MCP and REST verifiers
+  hop into the threadpool only for the session lookup.
+- CORS is explicit for Vercel and Vite: origins
+  `https://alexa.vercel.app` and `http://localhost:5173`, no credentials,
+  `Authorization` and `Content-Type` allowed, all methods allowed.
+- `DATABASE_URL` accepts Render's `postgres://` and `postgresql://` forms and
+  maps them to `psycopg`. `sqlalchemy` and `psycopg[binary]` are in
+  `pyproject.toml` and `requirements.txt`; `create_all` runs at startup.
+- `backend/.env.example` documents Google, database, frontend, session, exchange
+  code, dev login, and CORS settings. The account payload carries the demo
+  notice: accounts persist, the simulated house resets after inactivity or a
+  redeploy.
+
+### Verification
+
+```text
+uv run pytest -q      -> 207 passed
+uv run ruff check .   -> clean
+uv run pytest -q tests/test_google_auth.py -> 18 passed
+```
+
+The auth suite uses a mocked Google transport, so it exercises the real state,
+PKCE, callback, exchange, session, audit subject, CORS, and persistence paths
+without network access. It covers identity by Google `sub`, email refresh,
+unverified email refusal, state replay, exchange replay, logout, expiry, the
+local-only dev login, and sessions surviving a new app against the same database.
+
+### Gotchas
+
+- A developer `.env` with a real `ALEXA_ELEVENLABS_API_KEY` made the voice tests
+  expect a provider. `tests/conftest.py` now pins the key to `None` and pins the
+  CORS origins, so local secrets cannot change the suite.
+- Render free instances spin down. Accounts survive because they are in
+  Postgres, but the in-memory house and audit chain reset. Use a paid instance or
+  a keep-alive ping on demo day.
+- The Google Cloud client needs both callback URIs registered:
+  `http://localhost:8000/api/auth/callback/google` and
+  `https://alexa-api.onrender.com/api/auth/callback/google`.
+- Vercel preview URLs are different origins. Add one temporarily to
+  `ALEXA_CORS_ORIGINS`, or use the local dev login while working on a preview.

@@ -24,6 +24,19 @@ export interface WhoAmI {
   scopes: string[];
 }
 
+export interface AssistantReply {
+  understood: boolean;
+  status: "ok" | "confirmation_required" | "error" | "clarification" | "cancelled";
+  speech: string;
+  detail?: string | null;
+  detail_available: boolean;
+  intent?: { tool: string; params: Record<string, unknown>; rationale: string } | null;
+  pending?: { tool: string; effect: string; expires_at: string; ttl_seconds: number } | null;
+  suggestions: string[];
+  trace_id?: string | null;
+  audit_id?: string | null;
+}
+
 export interface TraceEvent {
   id: string;
   ts: string;

@@ -257,6 +257,11 @@ request Host header.
 **Revisit if:** App Runner cannot meet the latency or streaming requirements, or
 the deployment needs multiple regions. The container contract stays the same.
 
+**Revised 2026-10-22:** the production API now runs on Render with Render
+Postgres, and the console runs on Vercel. App Runner remains a valid host for
+the MCP container because the contract is just port 8000, TLS termination, and
+forwarded headers, but it is no longer the planned demo path. See D37 and D38.
+
 ## D20. The local CLI calls MCP; it is not an Alexa+ simulator
 
 **Decision:** `python -m app.cli` lists tools, calls one tool with JSON, checks
@@ -516,3 +521,69 @@ starts.
 **Revisit if:** the console needs an independent release cadence, or it must sit
 behind an identity provider at the edge. Then host it separately and keep the
 write endpoint behind the same auth.
+
+**Revised 2026-10-22:** production now serves the console from Vercel and the API
+from Render, so the same-origin assumption no longer holds there. The `/console`
+static mount remains available for single-origin deployments and local images,
+but the normal production path uses explicit CORS (D38). The conditional mount
+and the root-context Docker change are still open.
+
+## D37. Browser identity is Google OAuth; Alexa+ keeps a static bearer token
+
+**Decision:** The console signs in with Google using the authorization-code flow
+with PKCE. The callback runs on the API origin, exchanges the code server-side,
+requires `email_verified=true`, and redirects to the SPA with a single-use
+exchange code in the URL fragment. The SPA posts that code to
+`/api/auth/exchange` and receives an opaque `sess_...` bearer token once. The
+token is stored in `sessionStorage`, never `localStorage` and never a build
+artifact. The MCP endpoint and the console both accept either a static token or
+a Google session and resolve it to one `Principal`.
+
+Google identity is `(provider, provider_account_id)`, using Google's stable
+`sub`. Email is refreshed on each login but is not the lookup key. The audit
+subject is `user_<uuid>`, generated at first login, so an address change cannot
+move a household. An unverified email is refused with
+`/#/login?error=email_unverified`; this server sends no email and has no password
+reset.
+
+**Why:** A browser account needs to survive a Render redeploy, and a shared
+static token cannot tell two operators apart in the audit. Google gives a
+verified identity without adding password storage, email delivery, or an
+authorization server. A one-time code keeps the long-lived bearer out of a
+redirect, the server log, and browser history. PKCE plus a state row consumed
+before the provider call blocks callback replay. Static tokens stay because
+Alexa+, the inspector, and the CLI already work with them and do not need a
+browser.
+
+**Revisit if:** the project needs multiple identity providers, organization
+roles, refresh tokens, or cookie-based sessions. Then move to Managed Better
+Auth or another IdP and keep the `Principal` boundary; do not add a second
+execution path.
+
+## D38. Accounts use SQLAlchemy Core, Render Postgres, and explicit CORS
+
+**Decision:** Four small tables (`auth_users`, `auth_sessions`,
+`auth_oauth_states`, `auth_exchange_codes`) live in SQLite locally and Render
+Postgres in production. The store uses SQLAlchemy 2.x Core and
+`psycopg[binary]`, normalizes Render's `postgres://` and `postgresql://` forms to
+`postgresql+psycopg://`, and runs `create_all` at startup for the demo. Only
+hashes are stored for session tokens, OAuth states, and exchange codes. The auth
+routes are synchronous and run in FastAPI's threadpool; the rest of the app stays
+async. `DATABASE_URL` is the Render-provided variable, with a local file default.
+
+CORS is exactly `https://alexa.vercel.app` and `http://localhost:5173`, with
+`allow_credentials=False`, `allow_headers=["Authorization", "Content-Type"]`, and
+`allow_methods=["*"]`. Auth is a bearer header, not a cookie, so credentialed
+CORS is unnecessary and would widen the surface.
+
+**Why:** Accounts and sessions are the only state that must survive a redeploy.
+Keeping the house, audit chain, trace, and confirmations in memory preserves the
+demo's visible reset behavior and avoids pretending a simulator is durable. A
+small explicit store is easier to audit than an ORM graph and works unchanged on
+SQLite and Postgres. `create_all` is enough for a hackathon; migrations would add
+a step without protecting data that is already disposable.
+
+**Revisit if:** the schema changes after real users exist, or more than one
+process writes concurrently. Then add Alembic, a migration step before traffic,
+and a connection pool sized for the Render plan. The current demo recreates the
+account tables on a schema change.

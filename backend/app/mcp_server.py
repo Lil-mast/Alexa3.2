@@ -4,6 +4,7 @@ REST/tests share one decision path.
 
 from __future__ import annotations
 
+from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.context import Context
@@ -11,7 +12,7 @@ from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl
 
 from app import __version__
-from app.auth import Principal, StaticTokenVerifier, principal_from_access_token
+from app.auth import Principal, principal_from_access_token
 from app.config import Settings
 from app.models import ToolResponse
 from app.router import Router
@@ -49,7 +50,7 @@ def annotations_for(spec: ToolSpec) -> ToolAnnotations:
     )
 
 
-async def principal_from_context(ctx: Context, verifier: StaticTokenVerifier) -> Principal | None:
+async def principal_from_context(ctx: Context, verifier: TokenVerifier) -> Principal | None:
     """Re-verify the bearer token from the current request.
 
     The MCP middleware already rejected a bad token at the HTTP layer. Tool
@@ -68,7 +69,7 @@ async def principal_from_context(ctx: Context, verifier: StaticTokenVerifier) ->
     return principal_from_access_token(access) if access else None
 
 
-def build_mcp_server(settings: Settings, router: Router, verifier: StaticTokenVerifier) -> MCPServer:
+def build_mcp_server(settings: Settings, router: Router, verifier: TokenVerifier) -> MCPServer:
     # This is the resource server we advertise in the protected-resource
     # metadata; there is no token endpoint yet. Static dev tokens have no RFC
     # 8707 audience, so the audience check stays off until tokens carry a

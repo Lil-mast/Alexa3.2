@@ -1,7 +1,7 @@
 # Alexa backend
 
-Day 3 of the build plan: a rules-driven MCP server with confirmation tokens, a
-hash-chained audit log, undo, concise mode, and privacy toggles.
+A rules-driven MCP server with confirmation tokens, a hash-chained audit log,
+undo, concise mode, privacy toggles, and Google-backed browser accounts.
 
 What runs today:
 
@@ -27,6 +27,16 @@ What runs today:
 - Concise mode on by default, with `tell_me_more` returning the withheld detail.
 - Privacy settings enforced server-side. `third_party_sharing=false` refuses
   `book_room` (the `external=true` tool) with `PRIVACY_BLOCKED`.
+- Google sign-in for the console: authorization code with PKCE, a callback on
+  the API origin, a single-use exchange code, and an opaque `sess_...` bearer.
+  The SPA never receives a Google token.
+- Persistent users and sessions in SQLite locally and Render Postgres in
+  production. Only hashes of session tokens, OAuth states, and exchange codes
+  are stored. Accounts are keyed by Google `sub`, not email, and the audit
+  subject stays `user_<uuid>`.
+- Static bearer tokens remain for Alexa+, the inspector, and the CLI. Both
+  token kinds resolve to the same `Principal`, so there is still one execution
+  path.
 
 ## Run
 
@@ -54,19 +64,28 @@ with scopes `home:timers:write home:lights:write home:climate:write
 booking:rooms:write privacy:settings:write`. Replace
 `ALEXA_TOKENS_JSON` before deploying.
 
-> **Auth note.** This is a resource server with a static token table, not a full
-> OAuth 2.1 authorization server. The 401 challenge and RFC 9728 metadata are
-> spec-correct, but the advertised issuer (`ALEXA_PUBLIC_URL`) does not yet
-> serve authorization-server metadata. Alexa+ registration may require an OAuth
-> flow; if it does, add an authorization server before Day 4. Day 1 verification
-> with the Local Inspector works by sending `Authorization: Bearer dev-token`.
+> **Auth note.** MCP clients still use a static bearer token from
+> `ALEXA_TOKENS_JSON`. This server does not run an OAuth 2.1 authorization
+> server for MCP, though the 401 challenge and RFC 9728 metadata are
+> spec-correct. Browser sign-in is a separate Google OAuth flow for the console.
+> If Alexa+ registration requires authorization-server metadata, add one before
+> the device test. The Local Inspector works by sending
+> `Authorization: Bearer dev-token`.
 
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | POST/GET/DELETE | `/mcp` | Bearer | MCP Streamable HTTP |
-| GET | `/health` | none | App Runner health check |
+| GET | `/health` | none | Platform health check |
+| GET | `/api/auth/config` | none | Google availability, start URL, frontend URL, TTL, dev login |
+| GET | `/api/auth/google/start` | none | Create state and PKCE, redirect to Google |
+| GET | `/api/auth/callback/google` | none | Consume state, exchange the Google code, redirect to the SPA |
+| POST | `/api/auth/exchange` | none | Trade a single-use code for an opaque session bearer |
+| GET | `/api/auth/me` | Bearer | Account and session expiry for the current bearer |
+| PATCH | `/api/auth/me` | Bearer | Change the display name on a session |
+| POST | `/api/auth/logout` | Bearer | Revoke the current session |
+| POST | `/api/auth/dev-login` | none | Local-only session without Google |
 | GET | `/api/config` | none | Versions, tool count, rules version, voice availability, persistence marker |
 | GET | `/api/whoami` | Bearer | Subject, client, and scopes for a token |
 | GET | `/api/tools` | Bearer | Tool manifests, per-field rules, rules version, confirmation TTL |
@@ -246,7 +265,7 @@ hash does not hold. `GET /api/audit` returns only the caller's rows: the chain i
 global, but reading another subject's actions is not part of verifying it.
 
 At startup the server seeds three fixed rows from `app/audit_seed.json` and
-reports `audit_seeded: true` in `/health`. On App Runner a redeploy clears the
+reports `audit_seeded: true` in `/health`. A Render redeploy clears the
 container, so the seeded chain makes the reset read as intentional.
 
 Retention is enforced when `retention_days` changes: older rows for that subject
@@ -287,7 +306,8 @@ is deterministic code, so the data it needs is small and explicit:
 
 | Data | Where it lives now | Needed for the demo |
 |---|---|---|
-| Bearer tokens and their scopes | `ALEXA_TOKENS_JSON`, parsed at startup | Yes, one dev token |
+| Static bearer tokens and their scopes | `ALEXA_TOKENS_JSON`, parsed at startup | Yes, one dev token |
+| Users, sessions, OAuth states, exchange codes | SQLite locally, Render Postgres in production | Yes, created by sign-in |
 | Tool manifests (scopes, risk, confirmation text) | `app/tools/*.py` | Yes |
 | Value rules (types, bounds, enums, formats, defaults) | `app/rules/rules.yaml`, version `3` | Yes |
 | Confirmation tokens | `app/confirm.py`, in memory, 300-second TTL | Yes, created by booking |
@@ -296,11 +316,11 @@ is deterministic code, so the data it needs is small and explicit:
 | Privacy and concise settings | `app/privacy.py`, in memory, defaults per subject | Yes, changed by `privacy_set` |
 | Last action details for `tell_me_more` | `app/memory.py`, 20 per subject | Yes, filled by every executed call |
 
-Nothing is persisted across restarts yet. On App Runner a redeploy clears timers,
-lights, climate, bookings, traces, privacy settings, pending confirmations, and
-the audit chain. `BUILD_PLAN.md` accepts that tradeoff for the demo, so the
-server rebuilds a known seeded chain at boot and reports the marker. A lost
-confirmation is safe: the user is asked again.
+Accounts and sessions persist. Everything else is in process memory: a
+redeploy or restart clears timers, lights, climate, bookings, traces, privacy
+settings, pending confirmations, and the audit chain. `BUILD_PLAN.md` accepts
+that tradeoff for the demo, so the server rebuilds a known seeded chain at boot
+and reports the marker. A lost confirmation is safe: the user is asked again.
 
 ### How Alexa+ uses the data
 
@@ -359,9 +379,11 @@ docker run --rm -p 8000:8000 \
   alexa
 ```
 
-Set `ALEXA_PUBLIC_URL` to the App Runner HTTPS origin. Set
-`ALEXA_ALLOWED_HOSTS` to the App Runner hostname (without `https://`) to
-re-enable the DNS-rebinding guard; `*` disables it.
+Set `ALEXA_PUBLIC_URL` to the Render HTTPS origin. Set
+`ALEXA_ALLOWED_HOSTS` to the Render hostname (without `https://`) to re-enable
+the DNS-rebinding guard; `*` disables it. Set `DATABASE_URL` to the Render
+Postgres internal URL and set `ALEXA_CORS_ORIGINS` to the Vercel and local
+frontend origins.
 
 `requirements.txt` is generated from `uv.lock`, not edited by hand:
 
@@ -370,8 +392,8 @@ uv export --frozen --no-dev --no-hashes --no-header -o requirements.txt
 ```
 
 The image runs as UID 10001, installs the pinned transitive set, and has a
-Docker health check against `/health`. App Runner uses its own health check
-against the same path.
+Docker health check against `/health`. Render uses its own health check against
+the same path.
 
 ## Layout
 
@@ -382,7 +404,8 @@ backend/
 │   ├── cli.py             # local MCP client: tools, call, whoami, bench, audit
 │   ├── mcp_server.py      # MCPServer, tool registration, auth context
 │   ├── router.py          # auth -> rules -> privacy -> confirmation -> adapter -> audit
-│   ├── api/               # console REST: config, state, privacy, call, assistant, voice, journeys
+│   ├── api/               # console REST: auth, config, state, privacy, call, assistant, voice, journeys
+│   ├── accounts/          # Google OAuth, account store, session verifier
 │   ├── assistant/         # deterministic parser, pending confirmation, reply envelope
 │   ├── voice/             # ElevenLabs proxy, bounded cache, typed fallback
 │   ├── journeys/          # YAML schema, loader, isolated runner, fixtures
@@ -392,17 +415,19 @@ backend/
 │   ├── audit_seed.json    # deterministic startup fixture
 │   ├── privacy.py         # per-user settings and the concise preference
 │   ├── memory.py          # last action details for tell_me_more
-│   ├── auth.py            # static bearer tokens, scopes, 401 challenge
+│   ├── auth.py            # Principal, static bearer tokens, 401 challenge
 │   ├── models.py          # response, preview, and error contract
 │   ├── trace.py           # in-memory ring buffer
 │   ├── adapters/          # simulated timers, lights, climate, booking
 │   └── tools/             # manifests and handlers, including undo and privacy
-└── tests/                 # unit, HTTP, voice, journey, and live MCP integration tests
+└── tests/                 # unit, HTTP, auth, voice, journey, and live MCP integration tests
 ```
 
-## Next (Day 4, frontend and deploy)
+## Next
 
-- React console screens: Trace, Audit, Privacy, Journeys, plus the assistant bar.
-- Type the new endpoints in `frontend/src/api/types.ts` and the client.
+- Wire the sign-in, callback, and account screens to the auth routes.
+- Finish the React console screens: Trace, Audit, Privacy, Journeys, and the
+  assistant bar.
 - Set `ALEXA_ELEVENLABS_API_KEY` for the demo, or rely on browser speech.
-- App Runner deploy and demo rehearsal against the deployed origin.
+- Deploy the API to Render with Postgres, the console to Vercel, and rehearse
+  against the deployed origins.
