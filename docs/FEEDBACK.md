@@ -2,7 +2,46 @@
 
 Items marked **Not observed** describe a risk we have not reproduced in a live device test. Items marked **Confirm** need the team to check a claim before submission.
 
+## Links
+
+| Item | URL |
+|---|---|
+| Repository | https://github.com/Lil-mast/Alexa3.5 |
+| Console (live, from the repository About field) | https://alexa35.vercel.app |
+| API (from the deployment docs, confirm before submitting) | https://alexa-api.onrender.com |
+| MCP endpoint | https://alexa-api.onrender.com/mcp (confirm before submitting) |
+| Alexa+ developer console | TO-CONFIRM |
+| RFC 9728, protected resource metadata | https://www.rfc-editor.org/rfc/rfc9728 |
+| RFC 8414, authorization server metadata | https://www.rfc-editor.org/rfc/rfc8414 |
+| Friction log with per-entry code links | https://github.com/Lil-mast/Alexa3.5/blob/main/docs/FRICTION_LOG.md |
+
 ## Feedback Question 1: Which developer tools, APIs, and SDKs did you use and for what?
+
+Official documentation for each tool:
+
+| Tool | Documentation |
+|---|---|
+| Alexa+ | TO-CONFIRM |
+| MCP Python SDK 2.3.0 | https://github.com/modelcontextprotocol/python-sdk, spec at https://modelcontextprotocol.io |
+| FastAPI | https://fastapi.tiangolo.com |
+| Uvicorn | https://www.uvicorn.org |
+| Pydantic | https://docs.pydantic.dev |
+| PyYAML | https://pyyaml.org |
+| SQLAlchemy | https://docs.sqlalchemy.org |
+| psycopg | https://www.psycopg.org |
+| httpx2 | https://pypi.org/project/httpx2/ |
+| ElevenLabs | https://elevenlabs.io/docs |
+| Google OAuth 2.0 | https://developers.google.com/identity/protocols/oauth2 |
+| Render | https://render.com/docs |
+| Vercel | https://vercel.com/docs |
+| React | https://react.dev |
+| TypeScript | https://www.typescriptlang.org |
+| Vite | https://vite.dev |
+| uv | https://docs.astral.sh/uv |
+| pnpm | https://pnpm.io |
+| Mermaid | https://mermaid.js.org |
+
+These are the official homepages. Deep links to specific pages should be checked before submission.
 
 | Tool, API, or SDK | Used for | Where in the code |
 |---|---|---|
@@ -76,7 +115,7 @@ Items marked **Not observed** describe a risk we have not reproduced in a live d
 
 ## Feedback Question 4: For each tool, API, or SDK, how was your onboarding experience?
 
-- **MCP Python SDK:** The first working tool call took a few tries. The cause was the `Accept` header and the mount path, both found in troubleshooting, not in the quick start.
+- **MCP Python SDK:** The first working tool call took a few tries. The trailing-slash redirect (`/mcp/` to `/mcp`) and the 421 host check were the real blockers. Re-testing on 2026-10-23 showed the `Accept` header is not required by this build. See [FRICTION_LOG.md](FRICTION_LOG.md).
 - **FastAPI, Pydantic, SQLAlchemy:** Quick. The official docs covered the common cases.
 - **Google OAuth:** Slow. Creating the client, adding two callbacks, and understanding the PKCE flow took the most time.
 - **Render:** Fast with the blueprint. The dashboard values that must be entered manually are easy to miss.
@@ -110,84 +149,4 @@ Items marked **Not observed** describe a risk we have not reproduced in a live d
 
 ## Friction Log
 
-Each entry records what we did, what we expected, and what happened. Entries marked **Not observed** are risks we have not reproduced.
-
-### F1: Initialize an MCP session over Streamable HTTP
-
-- **Task:** Connect an MCP client to `/mcp`.
-- **Steps:** Send `POST /mcp` with `Content-Type: application/json` and no `Accept` header.
-- **Expected:** A session is created and `initialize` returns the server info.
-- **Actual:** The server returns 400 or 406.
-- **Severity:** Medium.
-- **Workaround:** Send `Accept: application/json, text/event-stream`. The CLI in `backend/app/cli.py` does this.
-- **Suggestion:** Name the required header in the error body.
-
-### F2: Mount the MCP app under a path
-
-- **Task:** Serve the MCP endpoint at `/mcp` alongside other routes.
-- **Steps:** Mount the MCP app at `/mcp` with an inner route of `/`, under Starlette 1.x.
-- **Expected:** `/mcp` responds directly.
-- **Actual:** The server returns 307 to `/mcp/`, which the streamable client does not follow.
-- **Severity:** High. It breaks the client connection.
-- **Workaround:** Mount at `/` with the MCP route at `/mcp` (`backend/app/main.py`).
-- **Suggestion:** Document the supported mount pattern in the SDK guide.
-
-### F3: Connect from a deployed host
-
-- **Task:** Connect a client to the Render URL.
-- **Steps:** Deploy without setting the host allow list.
-- **Expected:** The client connects.
-- **Actual:** The server returns 421 Invalid Host. Clients show this as a connection failure.
-- **Severity:** High on a public deployment.
-- **Workaround:** Set `ALEXA_ALLOWED_HOSTS` to the hostname without the scheme. Startup logs a warning when the value is `*`.
-- **Suggestion:** Return the reason in the 421 body.
-
-### F4: Add a route next to the catch-all mount
-
-- **Task:** Add `/health` after the MCP mount.
-- **Steps:** Register the route after `app.mount("/", ...)`.
-- **Expected:** The route responds.
-- **Actual:** The request is handled by the mount. No error is raised.
-- **Severity:** Medium. The failure is silent.
-- **Workaround:** Register routes before the mount. The order is commented in `backend/app/main.py`.
-- **Suggestion:** Warn at startup when a route is shadowed.
-
-### F5: Use the Render Postgres connection string
-
-- **Task:** Connect the API to Render Postgres.
-- **Steps:** Pass the `postgres://` URL to SQLAlchemy.
-- **Expected:** The engine uses psycopg.
-- **Actual:** The URL needs the `postgresql+psycopg://` scheme. **Confirm:** the exact error text was not recorded.
-- **Severity:** Medium.
-- **Workaround:** `normalize_database_url` rewrites the scheme, and a test covers it (`backend/tests/test_account_store.py`).
-- **Suggestion:** Accept the `postgres://` alias in SQLAlchemy, or document the rewrite.
-
-### F6: Free instance spins down during a demo
-
-- **Task:** Run the walkthrough on a deployed instance.
-- **Steps:** Leave the service idle until Render spins it down, then call a tool.
-- **Expected:** Device state and pending confirmations persist.
-- **Actual:** Device state, trace, audit chain, and pending confirmations reset. Pending confirmations become invalid.
-- **Severity:** Medium for the demo, low for correctness.
-- **Workaround:** The audit log reseeds from a fixture at boot, and `/health` reports `audit_seeded: true`, so the reset is visible.
-- **Suggestion:** A small persistent store, or a documented keep-warm option.
-
-### F7: Change the API origin for the console
-
-- **Task:** Point the Vercel console at a new Render URL.
-- **Steps:** Change `VITE_API_BASE` in the Vercel project.
-- **Expected:** The console uses the new origin without a rebuild.
-- **Actual:** The value is compiled into the bundle, so a redeploy is required.
-- **Severity:** Low.
-- **Workaround:** Redeploy. The change is one line.
-- **Suggestion:** Read the origin from runtime configuration.
-
-### F8: Register the MCP server in Alexa+
-
-- **Task:** Register `https://<service>/mcp` in the Alexa+ developer console.
-- **Steps:** Not yet attempted.
-- **Expected:** Registration succeeds with a bearer token.
-- **Actual:** **Not observed.** We expect the authorization-server metadata question in Feature Request 1 to be the first failure.
-- **Severity:** Critical if confirmed.
-- **Workaround:** Add an RFC 8414 document before the device test, if required.
-- **Suggestion:** Publish the exact registration requirements, including whether protected-resource metadata alone is enough.
+The full friction log, with reproduction steps, captured responses, and status for each entry, is in [FRICTION_LOG.md](FRICTION_LOG.md).
