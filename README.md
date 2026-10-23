@@ -257,6 +257,8 @@ business error exits non-zero, so the command is usable in a script.
 
 Each item names the tool, API, or SDK and the specific friction we hit. Items marked **to verify** are concerns we have not confirmed in a live device test yet.
 
+Full submission text, with friction log and feature requests: [docs/FEEDBACK.md](docs/FEEDBACK.md).
+
 ### Alexa+ (MCP client registration and tool calling)
 
 - **Registration metadata:** Confirm whether RFC 9728 protected-resource metadata alone is enough to register `https://<service>/mcp`, or whether Alexa+ also needs an RFC 8414 authorization-server document. We publish only the first, so this is the current device-test blocker.
@@ -299,6 +301,10 @@ Each item names the tool, API, or SDK and the specific friction we hit. Items ma
 - **uv:** `uv export --frozen` generates `backend/requirements.txt`, and CI checks it against `uv.lock`. No issues beyond the export step.
 - **pnpm, Vite 7, React 19:** The console builds and type checks clean. No issues observed.
 - **Mermaid:** Renders natively on GitHub. No issues observed.
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Taz.
 
 ## Scope
 
