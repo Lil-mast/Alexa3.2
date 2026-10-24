@@ -1,5 +1,7 @@
 # Alexa 3.5
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/lil-mast-alexa3-5-1shtqv?v=a08cbaf2b2138f6754291b09bbdd6b05)](https://m8ven.ai/mcp/lil-mast-alexa3-5-1shtqv?s=readme)
+
 **A deterministic rules and audit layer for Alexa+ agents.**
 
 Alexa is a self-hosted MCP server that lets Alexa+ control real things (timers, alarms, lights, thermostats, media) and take consequential actions (bookings, payments, deletions) without letting the language model touch device state directly. The model interprets what the user meant. Rules decide what happens. Every action is previewed, confirmed when risky, logged, and reversible where possible.
